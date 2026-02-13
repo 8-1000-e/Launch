@@ -113,12 +113,12 @@ export function Navbar() {
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
           {/* ── Logo ── */}
           <Link href="/" className="flex items-center gap-2.5 select-none">
-            <div
-              className="relative h-6 w-6"
+            <img
+              src="/logo_launch.jpeg"
+              alt="LAUNCH"
+              className="h-9 w-9 rounded-md object-cover"
               style={{ filter: "drop-shadow(0 0 6px rgba(201,168,76,0.5))" }}
-            >
-              <div className="absolute inset-0 rotate-45 bg-brand" />
-            </div>
+            />
             <span className="font-display text-[17px] font-bold tracking-tight">
               LAUNCH
             </span>

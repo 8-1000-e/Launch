@@ -86,3 +86,38 @@ Must also import `ColorType`, `CrosshairMode`, `LineStyle` as named exports from
 Edit to remove the LIVE SOL HUD didn't fully remove all JSX that referenced `livePrice` state variable. The state declaration was removed but some JSX still referenced it.
 ### Fix
 Read the full file and confirmed all HUD JSX was properly replaced in subsequent edit pass.
+
+## Next.js 16: ssr: false not allowed in Server Components (2026-02-12)
+### Symptom
+Build error: `ssr: false is not allowed with next/dynamic in Server Components. Please move it into a Client Component.`
+### Root Cause
+Used `next/dynamic(() => import("@/components/wallet-provider"), { ssr: false })` in `layout.tsx` which is a Server Component.
+### Fix
+Remove `next/dynamic` entirely. Just import the `"use client"` component directly:
+```tsx
+import { WalletProviderWrapper } from "@/components/wallet-provider";
+```
+The `"use client"` directive in `wallet-provider.tsx` already creates the client boundary. Server Components CAN import Client Components — Next.js handles SSR/hydration automatically.
+### Key Insight
+`"use client"` does NOT mean "skip SSR" — it means "this is a Client Component" which still pre-renders on the server but hydrates on the client.
+
+## Unicorn Studio: pointer-events:none not enough to disable mouse (2026-02-12)
+### Symptom
+Unicorn Studio 3D effect still reacted to cursor position even with `pointer-events: none` on the container div.
+### Root Cause
+Unicorn Studio script adds window-level mouse/touch event listeners (not element-level), so CSS `pointer-events: none` has no effect on the interaction.
+### Fix
+Use the official `data-us-disablemouse` attribute on the embed div:
+```html
+<div data-us-project="cqcLtDwfoHqqRPttBbQE" data-us-disablemouse />
+```
+
+## CSS hue-rotate: 35deg = green, not gold (2026-02-12)
+### Symptom
+Trying to shift Unicorn Studio effect from purple to gold using `hue-rotate(35deg)` resulted in a green tint instead.
+### Root Cause
+CSS hue-rotate operates on the HSL color wheel. Purple (270°) + 35° = ~305° which passes through green before reaching warm tones. The sepia+saturate base was already warm, so the 35deg pushed it past gold into green.
+### Fix
+Use `hue-rotate(5deg)` with `sepia(1) saturate(2)` — the sepia does most of the work, hue-rotate just fine-tunes.
+### Key Insight
+For gold-tinting: `sepia(1)` is the primary transform (converts any color to warm brown). `saturate(2)` intensifies. `hue-rotate` should be minimal (0-10deg max).

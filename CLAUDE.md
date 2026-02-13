@@ -7,9 +7,11 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 ## Current State
 
 - **Branch**: main
-- **Status**: All trading + referral instructions complete. Migration to Raydium CPMM in progress (struct partially written, handler not started).
-- **Last updated**: 2026-02-11
-- **Dev server**: `npx next dev --webpack --port 3001` (MUST use --webpack flag, Turbopack hangs with dual lockfiles)
+- **Status**: All trading + referral instructions complete. Migration to Raydium CPMM in progress (struct partially written, handler not started). Frontend: wallet connection live, Unicorn Studio background, referral dashboard in profile.
+- **Last updated**: 2026-02-12
+- **Dev server**: `cd app/ && npx next dev --webpack --port 3001` (MUST use --webpack flag, Turbopack hangs with dual lockfiles)
+- **Frontend location**: `/Users/emile/Documents/learn/Dev Journey/Launch/app/` (moved from `token-lp/app/`)
+- **Backend location**: `/Users/emile/Documents/learn/Dev Journey/token-lp/programs/token-lp/`
 
 ## Approach
 
@@ -62,6 +64,24 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 - [ ] SDK (`sdk/src/client.ts`, `math.ts`, `pda.ts`, `types.ts`, `constants.ts`)
 - [ ] Tests
 
+## Task Progress — Frontend
+
+- [x] Landing page V10+ (hero with 3D bonding curve, token grid, scroll transitions)
+- [x] Landing page polish: footer, scroll indicator in hero, floating CTA button
+- [x] Token detail / trade page (`/token/[id]`) — full 2-column layout with wow effects
+- [x] Token detail: banner image per token (gradient from token.color) + social links
+- [x] Mobile responsive: hero compact (no 3D), 2-col token grid, no scroll effects
+- [x] Desktop scroll-snap between hero and token list (proximity, smooth)
+- [x] Create token page (`/create`) — form with color picker, banner upload, drag & drop image, buy-on-create toggle
+- [x] Leaderboard page (`/leaderboard`) — 3 tabs, animated hero stats, CSS trophy, podium, hall of fame
+- [x] Profile page (`/profile/[address]`) — procedural banner/identicon, stats, heatmap, 4 tabs
+- [x] Solana wallet connection (Phantom + Solflare) — custom UI, devnet, auto-reconnect
+- [x] Navbar: real wallet modal + connected dropdown + balance display + "My Profile" link
+- [x] Profile referral dashboard: register button, referral link copy, claimable balance, claim button (own profile only)
+- [x] Unicorn Studio 3D particle background for token grid section (gold-tinted, no mouse interaction)
+- [x] Cross-fade transition: hero 3D bonding curve fades out → Unicorn Studio fades in on scroll
+- [ ] Clean up orphan files: `how-it-works.tsx`, `activity-ticker.tsx`
+
 ## Security Audit Summary (2026-02-11)
 
 ### CRITICAL
@@ -69,13 +89,13 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 2. **Integer underflow** in `sol_amount - fee` / `sol_out - fee` — needs checked_sub
 
 ### HIGH
-3. No status check in create_token/create_and_buy → FIXED this session
+3. No status check in create_token/create_and_buy → FIXED
 4. Sell blocked on completed curve (users locked until migration)
 5. State updates after CPIs (should be checks-effects-interactions)
 
 ### MEDIUM
 6. No events emitted (events.rs empty)
-7. Referrer was UncheckedAccount → FIXED this session (now Account<Referral>)
+7. Referrer was UncheckedAccount → FIXED (now Account<Referral>)
 8. No string length validation on name/symbol/uri
 
 ## Key Decisions — Backend
@@ -101,6 +121,10 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 - **--webpack flag**: Turbopack infinite-loops with dual lockfiles
 - **Design system**: warm gold (#c9a84c) brand, dark theme (#0c0a09), Space Grotesk display, Geist Sans/Mono
 - **No UI libraries**: Pure Tailwind CSS v4 only
+- **Wallet adapter with custom UI**: `@solana/wallet-adapter-react` for logic, NO `@solana/wallet-adapter-react-ui` (too generic/blue). Custom wallet modal + connected dropdown matching gold/dark DA.
+- **Direct import for client components in layout.tsx**: Do NOT use `next/dynamic` with `{ ssr: false }` in Server Components (Next.js 16 error). Just import `"use client"` components directly — Next.js handles the boundary.
+- **Unicorn Studio for token section background**: `data-us-project="cqcLtDwfoHqqRPttBbQE"` with `data-us-disablemouse` to disable cursor interaction. Gold-tinted via CSS filter `sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)`.
+- **Cross-fade between hero and token section**: Hero (Three.js bonding curve) fades out with `Math.pow` ease + blur. Unicorn Studio fades in overlapping at `scrollProgress > 0.2`.
 
 ## Pentagon Pod
 
@@ -111,7 +135,7 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 
 ## Critical File Paths
 
-### Backend (programs/token-lp/src/)
+### Backend (token-lp/programs/token-lp/src/)
 - `lib.rs:15-69` — #[program] module with 7 instructions wired
 - `constants.rs` — all PDA seeds + defaults (MIGRATION_FEE = 0.5 SOL)
 - `errors.rs` — AdminError + MathError + TradeError enums
@@ -130,11 +154,23 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 - `instructions/migration/migrate_to_raydium.rs` — struct partially written ← CURRENT
 - `utils/math.rs` — calculate_buy_amount + calculate_sell_amount
 
-### Frontend (app/src/)
+### Frontend (Launch/app/src/)
+- `components/wallet-provider.tsx` — Solana wallet ConnectionProvider + WalletProvider (Phantom, Solflare, devnet)
 - `components/bonding-curve-3d.tsx` — vanilla Three.js 3D chart
-- `components/hero.tsx` — desktop: immersive 3D; mobile: compact
-- `app/page.tsx` — home page with scroll-snap
+- `components/hero.tsx` — desktop: immersive 3D + scroll fade/blur/zoom; mobile: compact text-only
+- `components/navbar.tsx` — sticky navbar with real wallet connection (modal + dropdown + balance)
+- `components/footer.tsx` — 4-column footer with Solana badge
+- `components/token-card.tsx` — token grid card with sparkline
+- `components/token-chart.tsx` — TradingView lightweight-charts v5 area chart with timeframes
+- `components/trade-form.tsx` — buy/sell form with particle burst
+- `components/trade-history.tsx` — live simulated trade history table
+- `components/ticker-price.tsx` — odometer-style digit rolling price animation
+- `components/bonding-curve-mini.tsx` — SVG mini bonding curve with pulsing dot
+- `components/button-particles.tsx` — canvas particle burst hook
+- `components/sparkline.tsx` — inline SVG sparkline for token cards
+- `app/layout.tsx` — fonts, metadata, WalletProviderWrapper wrapping children
+- `app/page.tsx` — home page with scroll-snap, Unicorn Studio background, cross-fade
 - `app/token/[id]/page.tsx` — token detail + trade
 - `app/create/page.tsx` — create token form
 - `app/leaderboard/page.tsx` — 3 tabs, podium, tables
-- `app/profile/[address]/page.tsx` — profile with heatmap, 4 tabs
+- `app/profile/[address]/page.tsx` — profile with heatmap, 4 tabs, referral dashboard (own profile)

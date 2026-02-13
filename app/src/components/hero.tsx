@@ -188,9 +188,9 @@ export function Hero({
           willChange: isMobile ? "auto" : "opacity, transform",
         }}
       >
-        <div className="relative z-10 flex py-12 sm:py-0 sm:h-[85vh] sm:min-h-[600px] items-center">
+        <div className="relative z-10 flex pt-6 pb-4 sm:pt-0 sm:pb-0 sm:h-[85vh] sm:min-h-[600px] items-center">
           <div className="mx-auto max-w-7xl w-full px-4 sm:px-6">
-            <div className="max-w-lg">
+            <div className="max-w-lg rounded-xl sm:rounded-none backdrop-blur-md sm:backdrop-blur-none bg-bg/40 sm:bg-transparent p-4 sm:p-0">
               {/* Headline */}
               <h1
                 className="font-display text-3xl font-bold tracking-tight sm:text-4xl lg:text-5xl"

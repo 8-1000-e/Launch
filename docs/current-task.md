@@ -1,84 +1,74 @@
-# Current Task — Raydium CPMM Migration (Phase 5)
+# Current Task — Wallet Connection + UI Polish (2026-02-12)
 
 ## What Was Done This Session
 
-### 1. create_and_buy.rs — Handler Complete
-- Full handler: creates token (init bonding curve, mint_to, metadata CPI) + atomic first buy
-- No slippage check (first buyer, deterministic price)
-- `require!(sol_amount > 0)` — if frontend doesn't want to buy, it calls `create_token` instead
-- Status check added: `require!(global.status != ProgramStatus::Paused)`
-- Builds clean
+### 1. Solana Wallet Connection — Full Implementation
+- Installed `@solana/web3.js@1`, `@solana/wallet-adapter-base`, `@solana/wallet-adapter-react`, `@solana/wallet-adapter-wallets` with `--legacy-peer-deps` (React 19 compatibility)
+- Created `wallet-provider.tsx` — ConnectionProvider (devnet via `clusterApiUrl`) + WalletProvider (Phantom, Solflare adapters, `autoConnect={true}`)
+- Modified `layout.tsx` — wraps `{children}` with `WalletProviderWrapper`. Direct import, NOT `next/dynamic` with `ssr: false` (Next.js 16 doesn't allow that in Server Components)
+- Rewrote `navbar.tsx` completely:
+  - `useWallet()` + `useConnection()` hooks for real wallet state
+  - Balance fetching via `connection.getBalance(publicKey)` + `connection.onAccountChange()` live listener
+  - **Disconnected state**: "Connect" button → opens wallet selector modal
+  - **Wallet modal**: lists detected wallets (Phantom, Solflare) with installed/not-installed badges, backdrop blur, gold/dark styling, Escape to close
+  - **Connected state**: shows `{balance} SOL` + truncated address → click opens dropdown
+  - **Connected dropdown**: wallet icon + name, full address with copy button, "My Profile" link to `/profile/[publicKey]`, disconnect button
+  - Keyboard: Escape closes modal/dropdown, outside click closes both
+- No webpack polyfills needed (build passed clean)
 
-### 2. sell.rs — Handler Complete (Step-by-Step)
-- Mirror of buy.rs with reversed CPI signing
-- Fee on `sol_out` (not token_amount): `fee = sol_out * bps / 10000`
-- Transfer 1: tokens seller→bonding_curve (`CpiContext::new`, token_program, seller signs)
-- Transfer 2: SOL bonding_curve→seller (`CpiContext::new_with_signer`, system_program, PDA signs)
-- All fee transfers from PDA with `CpiContext::new_with_signer` + `&binding`
-- State: `virtual_sol -= sol_out`, `virtual_token += token_amount`, `real_sol -= sol_out`, `real_token += token_amount`
-- Referral integration: `Option<Account<'info, Referral>>`
+### 2. Profile Referral Dashboard — Own Profile Detection
+- Added `useWallet()` import to `/profile/[address]/page.tsx`
+- `isOwnProfile = useWallet().publicKey?.toBase58() === address` detection
+- Referrals tab always visible on own profile (even with 0 referrals)
+- Enhanced `ReferralsTab` component with:
+  - **Not registered state**: "Become a Referrer" button with explanation text
+  - **Registered state**: Referral link with copy button (copies `window.location.origin/trade?ref=ADDRESS`)
+  - 4th stat card: "Claimable Balance" with SOL amount
+  - "Claim Fees" button with loading spinner + success checkmark animation
+- "My Profile" link added to navbar connected dropdown
 
-### 3. calculate_sell_amount — Added to math.rs
-- `sol_out = (virtual_sol * token_amount) / (virtual_token + token_amount)`
-- Mirror of calculate_buy_amount with sol/token swapped
+### 3. Unicorn Studio 3D Background (Token Grid Section)
+- Replaced Spline iframe attempt (had white background issues) with Unicorn Studio embed
+- `data-us-project="cqcLtDwfoHqqRPttBbQE"` — 3D particle/aura effect
+- `data-us-disablemouse` attribute disables cursor interaction (CSS `pointer-events: none` wasn't enough — Unicorn Studio script adds window-level listeners)
+- Gold tint via CSS filter: `sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)`
+- Script loaded dynamically in useEffect (desktop only, not on mobile)
+- `(window as any).UnicornStudio.init()` called after script loads
+- Fixed: `hue-rotate(35deg)` made it green, reverted to `5deg`
 
-### 4. register_referral.rs — Complete
-- Creates Referral PDA with `seeds = [REFERRAL_SEED, user.key().as_ref()]`
-- Sets referrer, total_earned=0, trade_count=0, bump
-- Uses existing `Referral` struct from state
+### 4. Cross-Fade Transition (Hero → Token Section)
+- Hero (Three.js bonding curve canvas) fades out with scroll:
+  - `canvasFade = Math.max(0, 1 - Math.pow(scrollProgress / 0.6, 1.5))` — exponential ease-out
+  - `canvasBlur = Math.pow(scrollProgress / 0.5, 2) * 20` — progressive blur up to 20px
+  - `canvasScale = 1 + scrollProgress * 0.15` — subtle zoom as it fades
+- Unicorn Studio fades in overlapping:
+  - `opacity: Math.min(1, Math.max(0, (scrollProgress - 0.2) / 0.35))` — starts fading in at 20% scroll
+  - Overlap zone at 20-60% scroll where both are partially visible
 
-### 5. claim_referral_fees.rs — Complete
-- Withdraws lamports from Referral PDA (rent-protected)
-- `minimum_balance(8 + Referral::INIT_SPACE)` for correct rent
-- `.to_account_info().lamports()` pattern (Account<T> doesn't have .lamports() directly)
-- Constraint: `referral.referrer == user.key()`
-
-### 6. Referral Integration into buy.rs + sell.rs
-- Changed `Option<UncheckedAccount>` → `Option<Account<'info, Referral>>`
-- Added `referral.total_earned += referral_fee; referral.trade_count += 1;`
-- Fee sent to Referral PDA, referrer claims via `claim_referral_fees`
-
-### 7. Security Audit — Full Program
-- CRITICAL: No input validation in update_config (admin can set fee_bps > 10000)
-- CRITICAL: Integer underflow in `sol_amount - fee` needs checked_sub
-- HIGH: Sell blocked on completed curve (users locked until migration)
-- HIGH: State updates after CPIs (should be checks-effects-interactions)
-- MEDIUM: No events emitted, no string length validation
-- Status checks added to create_token and create_and_buy (was missing)
-
-### 8. migrate_to_raydium.rs — Struct Partially Written
-- Copied Raydium CPMM accounts from official example
-- Added bonding_curve + mint + fee_vault accounts
-- Fixed: removed `init` from mint/bonding_curve (already exist at migration time)
+### 5. Project Directory Moved
+- Frontend moved from `token-lp/app/` to `Launch/app/`
+- `token-lp/app/src/` is now empty
+- Backend stays in `token-lp/programs/token-lp/`
+- Dev server now runs from `Launch/app/`
+- Ran `npm install --legacy-peer-deps` in new location
 
 ## What's Next — Immediate
 
-### 1. Fix migrate_to_raydium.rs struct (remaining issues)
-- Lines 101/109: `token::authority = creator` → `token::authority = bonding_curve` (creator doesn't exist in struct)
-- `fee_vault` needs `mut` (migration fee gets sent there)
-- wSOL wrapping: bonding curve holds raw SOL lamports, Raydium needs wrapped SOL token accounts
-- Need to add wSOL-related accounts (WSOL mint, wrapping accounts)
+### Backend (in token-lp/)
+1. Fix `migrate_to_raydium.rs` struct (token authority, fee_vault mut, wSOL accounts)
+2. Write `migrate_to_raydium.rs` handler
+3. Security audit fixes (checked_sub, input validation)
+4. Events
+5. Tests
 
-### 2. Write migrate_to_raydium.rs handler
-Roadmap:
-1. Validations (authority == global.admin, curve completed, not already migrated)
-2. Migration fee: transfer 0.5 SOL from bonding curve to fee_vault
-3. Wrap remaining SOL into wSOL token account
-4. CPI to Raydium CPMM `initialize` (creates pool with token + wSOL)
-5. Burn LP tokens (or send to dead address)
-6. Mark `bonding_curve.migrated = true`
-
-### 3. Security audit fixes
-- Input validation in update_config (cap fee_bps, validate virtual_sol > 0)
-- checked_sub for fee calculations in buy/sell
-
-### 4. Events (events.rs)
-- TokenCreated, TokenBought, TokenSold, CurveGraduated, Migrated
-
-### 5. Tests
-- 01_admin.test.ts through 05_migration.test.ts
+### Frontend (in Launch/app/)
+1. Clean up orphan files (`how-it-works.tsx`, `activity-ticker.tsx`)
+2. Connect frontend to real program (once deployed to devnet)
+3. Logo — still iterating on AI-generated prompts (simple upward chart arrow, gold on dark)
 
 ## Known Issues
-- `events.rs` still empty
-- No tests written yet
-- Security audit items not yet fixed
+- `events.rs` still empty (backend)
+- No tests written yet (backend)
+- Security audit items not yet fixed (backend)
+- Orphan component files: `how-it-works.tsx`, `activity-ticker.tsx`
+- Mock data everywhere in frontend (will be replaced with real program data)

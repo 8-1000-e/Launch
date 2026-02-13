@@ -23,6 +23,10 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "LAUNCH — Token Launchpad",
   description: "Create and trade tokens on Solana. Watch them graduate.",
+  icons: {
+    icon: "/logo_launch.jpeg",
+    apple: "/logo_launch.jpeg",
+  },
 };
 
 export default function RootLayout({

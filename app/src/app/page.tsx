@@ -173,8 +173,8 @@ export default function Home() {
     // Enable snap scroll on home page only (desktop)
     if (!mobile) document.documentElement.classList.add("snap-page");
 
-    // Load Unicorn Studio (desktop only)
-    if (!mobile && !(window as any).UnicornStudio) {
+    // Load Unicorn Studio
+    if (!(window as any).UnicornStudio) {
       (window as any).UnicornStudio = { isInitialized: false };
       const script = document.createElement("script");
       script.src =
@@ -186,7 +186,7 @@ export default function Home() {
         }
       };
       document.head.appendChild(script);
-    } else if (!mobile && (window as any).UnicornStudio?.init) {
+    } else if ((window as any).UnicornStudio?.init) {
       // Re-init if script already loaded (e.g. navigation back)
       (window as any).UnicornStudio.init();
     }
@@ -295,26 +295,24 @@ export default function Home() {
       {/* Noise grain texture (no parallax — stays fixed) */}
       <div className="noise-overlay" />
 
-      {/* ── Unicorn Studio 3D background — fades in after hero ── */}
-      {!isMobile && (
+      {/* ── Unicorn Studio 3D background ── */}
+      <div
+        className="pointer-events-none fixed inset-0"
+        style={isMobile ? { opacity: 1 } : {
+          // Desktop: cross-fade starts at 20% scroll, full at 55%
+          opacity: Math.min(1, Math.max(0, (scrollProgress - 0.2) / 0.35)),
+          willChange: "opacity",
+        }}
+      >
         <div
-          className="pointer-events-none fixed inset-0"
-          style={{
-            // Cross-fade: starts at 20% scroll, full at 55% — overlaps with hero fade-out
-            opacity: Math.min(1, Math.max(0, (scrollProgress - 0.2) / 0.35)),
-            willChange: "opacity",
-          }}
-        >
-          <div
-            data-us-project="cqcLtDwfoHqqRPttBbQE"
-            data-us-disablemouse
-            className="absolute inset-0"
-            style={{ filter: "sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)" }}
-          />
-          {/* Readability overlay */}
-          <div className="absolute inset-0 bg-bg/30" />
-        </div>
-      )}
+          data-us-project="cqcLtDwfoHqqRPttBbQE"
+          data-us-disablemouse
+          className="absolute inset-0"
+          style={{ filter: "sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)" }}
+        />
+        {/* Readability overlay */}
+        <div className="absolute inset-0 bg-bg/30" />
+      </div>
 
       {/* ── Floating CTA — appears after scrolling past hero ── */}
       <a
@@ -347,7 +345,7 @@ export default function Home() {
         </div>
 
         <main
-          className="snap-section mx-auto max-w-7xl px-4 sm:px-6 pt-8 pb-20"
+          className="snap-section mx-auto max-w-7xl px-4 sm:px-6 pt-4 sm:pt-8 pb-20"
           style={isMobile ? {} : {
             opacity: Math.min(1, tokenProgress * 1.8),
             transform: `translateY(${Math.max(0, (1 - tokenProgress) * 100)}px) scale(${0.92 + tokenProgress * 0.08})`,

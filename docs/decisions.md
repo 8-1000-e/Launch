@@ -168,3 +168,44 @@
 **Context**: Need to CPI into Raydium CPMM from Anchor 0.32.1 program.
 **Decision**: `raydium-cp-swap = { git = "https://github.com/raydium-io/raydium-cp-swap", features = ["no-entrypoint", "cpi"] }`
 **Rationale**: Crate built for Anchor 0.29 but compiles fine with 0.32.1. Provides account structs (AmmConfig, PoolState) and CPI helpers. No version conflicts.
+
+## 2026-02-12 — Wallet adapter with custom UI (no wallet-adapter-react-ui)
+**Context**: Implementing Solana wallet connection for the frontend.
+**Decision**: Use `@solana/wallet-adapter-react` for logic only. Build custom wallet modal + connected dropdown. Do NOT use `@solana/wallet-adapter-react-ui`.
+**Rationale**: The official UI package has a generic blue/purple style that clashes with the gold/dark design system. Custom UI matches the DA perfectly.
+
+## 2026-02-12 — Direct import over next/dynamic for client components in layout.tsx
+**Context**: Wrapping children with WalletProviderWrapper in `layout.tsx` (Server Component).
+**Decision**: Import `WalletProviderWrapper` directly. Do NOT use `next/dynamic` with `{ ssr: false }`.
+**Rationale**: Next.js 16 explicitly forbids `ssr: false` in `next/dynamic` inside Server Components. Build error: "ssr: false is not allowed with next/dynamic in Server Components." The `"use client"` directive in the component already creates the client boundary — Next.js handles SSR/hydration automatically.
+**Skill created**: `~/.claude/skills/brain-dump/extracted/nextjs16-dynamic-ssr-false-server-component/SKILL.md`
+
+## 2026-02-12 — @solana/web3.js@1 (not v2) for wallet adapter compatibility
+**Context**: Installing Solana web3.js for wallet connection.
+**Decision**: Pin to `@solana/web3.js@1` (v1.x), not the newer v2.
+**Rationale**: `@solana/wallet-adapter-react` and all wallet adapter packages still depend on web3.js v1. The v2 rewrite has a completely different API and isn't compatible yet.
+
+## 2026-02-12 — --legacy-peer-deps for wallet adapter packages
+**Context**: Installing wallet adapter packages with React 19.
+**Decision**: Always use `npm install --legacy-peer-deps` for wallet adapter packages.
+**Rationale**: Wallet adapter packages declare `peerDependencies: { "react": "^17 || ^18" }` — they don't officially support React 19 yet but work fine. `--legacy-peer-deps` skips the strict check.
+
+## 2026-02-12 — Unicorn Studio over Spline for 3D background
+**Context**: Wanted animated 3D particle background for the token grid section.
+**Decision**: Use Unicorn Studio embed (`data-us-project`) instead of Spline iframe.
+**Rationale**: Spline iframe had a white background that couldn't be fully removed (even with CSS invert/filter). Unicorn Studio has transparent background by default and offers `data-us-disablemouse` attribute to disable cursor interaction. Script loaded dynamically, desktop only.
+
+## 2026-02-12 — CSS filter chain for gold-tinting embedded 3D
+**Context**: Unicorn Studio 3D effect was purple/blue, needed to match gold DA.
+**Decision**: Apply `filter: sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)` to the embed container.
+**Rationale**: `sepia(1)` converts to warm brown, `saturate(2)` intensifies, `hue-rotate(5deg)` shifts slightly toward gold. Higher hue-rotate values (35deg) made it green. 5deg is the sweet spot.
+
+## 2026-02-12 — Referral dashboard in profile page, not separate page
+**Context**: Pentagon pod mentor ordered a "Referral Dashboard page."
+**Decision**: Integrated referral dashboard features into the existing `/profile/[address]` Referrals tab instead of creating a new `/referral` page.
+**Rationale**: The profile page already has a Referrals tab. Adding register/link/stats/claim there (with own-profile detection via `useWallet()`) is more cohesive than a separate page.
+
+## 2026-02-12 — Project split: token-lp (backend) + Launch (frontend)
+**Context**: Frontend was originally in `token-lp/app/` alongside the Anchor program.
+**Decision**: Frontend moved to `/Users/emile/Documents/learn/Dev Journey/Launch/app/`. Backend stays in `token-lp/`.
+**Rationale**: User reorganized project structure. Both directories have their own CLAUDE.md and docs/.
