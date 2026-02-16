@@ -36,7 +36,7 @@ export function useBondingCurveLive(
         try {
           // Lazy import to avoid circular deps
           const { AnchorProvider, Program } = await import("@coral-xyz/anchor");
-          const IDL = (await import("../../../target/idl/token_lp.json")).default;
+          const IDL = (await import("../../../sdk/idl/token_lp.json")).default;
 
           // We need to deserialize the account data using Anchor's coder
           const dummyProvider = new AnchorProvider(

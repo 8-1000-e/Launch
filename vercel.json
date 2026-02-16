@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd app && yarn build",
+  "installCommand": "cd app && yarn install",
+  "outputDirectory": "app/.next"
+}
