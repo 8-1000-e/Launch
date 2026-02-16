@@ -1,7 +1,7 @@
 import { BN, Program, AnchorProvider, AnchorError } from "@coral-xyz/anchor";
 import { PublicKey, Keypair, SystemProgram, SYSVAR_RENT_PUBKEY, SendTransactionError } from "@solana/web3.js";
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { TokenLp } from "../../target/types/token_lp";
+import { TokenLp } from "../idl/token_lp";
 import IDL from "../idl/token_lp.json";
 import { PROGRAM_ID, TOKEN_METADATA_PROGRAM_ID } from "./constants";
 import { getBondingCurvePda, getFeeVaultPda, getGlobalPda, getMetadataPda, getReferralPda } from "./pda";

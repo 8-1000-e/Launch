@@ -20,7 +20,13 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@sdk/*": ["../sdk/src/*"]
+      "@sdk/*": ["../sdk/src/*"],
+      "@coral-xyz/anchor": ["./node_modules/@coral-xyz/anchor"],
+      "@coral-xyz/anchor/*": ["./node_modules/@coral-xyz/anchor/*"],
+      "@solana/web3.js": ["./node_modules/@solana/web3.js"],
+      "@solana/web3.js/*": ["./node_modules/@solana/web3.js/*"],
+      "@solana/spl-token": ["./node_modules/@solana/spl-token"],
+      "@solana/spl-token/*": ["./node_modules/@solana/spl-token/*"]
     }
   },
   "include": [
