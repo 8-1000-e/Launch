@@ -89,18 +89,18 @@ export default function Home() {
         }
 
         const accounts = await fetchClient.listAllBondingCurves();
-        const mints = accounts.map((acc) => acc.account.mint.toBase58());
+        const mints = accounts.map((acc: any) => acc.account.mint.toBase58());
 
         // Fetch metadata in parallel
         const metadataMap = await fetchBatchMetadata(connection, mints);
 
         // Filter out tokens without metadata URI (broken/test tokens)
-        const withMetadata = accounts.filter((acc) => {
+        const withMetadata = accounts.filter((acc: any) => {
           const meta = metadataMap.get(acc.account.mint.toBase58());
           return meta && meta.uri;
         });
 
-        const mapped: TokenData[] = withMetadata.map((acc) => {
+        const mapped: TokenData[] = withMetadata.map((acc: any) => {
           const bc = acc.account;
           const mintAddr = bc.mint.toBase58();
           const meta = metadataMap.get(mintAddr);
