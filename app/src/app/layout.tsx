@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
 import { WalletProviderWrapper } from "@/components/wallet-provider";
 
 const geistSans = Geist({
@@ -40,6 +41,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${spaceGrotesk.variable} antialiased`}
       >
         <WalletProviderWrapper>{children}</WalletProviderWrapper>
+        <Analytics />
       </body>
     </html>
   );
