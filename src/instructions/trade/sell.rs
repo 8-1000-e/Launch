@@ -47,51 +47,53 @@ pub fn _sell(ctx: Context<Sell>, token_amount: u64, min_sol_out: u64) -> Result<
     ctx.accounts.bonding_curve.sub_lamports(sol_after_fee)?;
     ctx.accounts.seller.add_lamports(sol_after_fee)?;
 
-    // Creator fee
-    let creator_fee = (fee as u128)
-        .checked_mul(ctx.accounts.global.creator_share_bps as u128)
-        .ok_or(MathError::Overflow)?
-        .checked_div(10_000)
-        .ok_or(MathError::DivisionByZero)?;
-    let creator_fee = u64::try_from(creator_fee).map_err(|_| MathError::CastOverflow)?;
-    let remaining_fee = fee.checked_sub(creator_fee).ok_or(MathError::Overflow)?;
+    // Fee split: referral first (10% of total fee), then creator (65% of remainder), then protocol
+    let mut remaining_fee = fee;
 
-    if creator_fee > 0 {
-        ctx.accounts.bonding_curve.sub_lamports(creator_fee)?;
-        ctx.accounts.creator_account.add_lamports(creator_fee)?;
-    }
-
+    // 1. Referral fee (10% of total fee) — calculated first to reward referrers on the full fee
     if let Some(referral) = &mut ctx.accounts.referral
     {
-        // Validate referral PDA
         let (expected_pda, _) = Pubkey::find_program_address(
             &[REFERRAL_SEED, referral.referrer.as_ref()],
             ctx.program_id,
         );
         require!(referral.key() == expected_pda, TradeError::InvalidReferral);
 
-        let referral_fee = (remaining_fee as u128)
+        let referral_fee = (fee as u128)
             .checked_mul(ctx.accounts.global.referral_share_bps as u128)
             .ok_or(MathError::Overflow)?
             .checked_div(10_000)
             .ok_or(MathError::DivisionByZero)?;
         let referral_fee = u64::try_from(referral_fee).map_err(|_| MathError::CastOverflow)?;
 
-        let protocol_fee = remaining_fee.checked_sub(referral_fee).ok_or(MathError::Overflow)?;
-
-        ctx.accounts.bonding_curve.sub_lamports(protocol_fee)?;
-        ctx.accounts.fee_vault.add_lamports(protocol_fee)?;
-
         ctx.accounts.bonding_curve.sub_lamports(referral_fee)?;
         referral.add_lamports(referral_fee)?;
 
         referral.total_earned = referral.total_earned.checked_add(referral_fee).ok_or(MathError::Overflow)?;
         referral.trade_count = referral.trade_count.checked_add(1).ok_or(MathError::Overflow)?;
+
+        remaining_fee = remaining_fee.checked_sub(referral_fee).ok_or(MathError::Overflow)?;
     }
-    else
-    {
-        ctx.accounts.bonding_curve.sub_lamports(remaining_fee)?;
-        ctx.accounts.fee_vault.add_lamports(remaining_fee)?;
+
+    // 2. Creator fee (65% of remaining fee after referral)
+    let creator_fee = (remaining_fee as u128)
+        .checked_mul(ctx.accounts.global.creator_share_bps as u128)
+        .ok_or(MathError::Overflow)?
+        .checked_div(10_000)
+        .ok_or(MathError::DivisionByZero)?;
+    let creator_fee = u64::try_from(creator_fee).map_err(|_| MathError::CastOverflow)?;
+
+    if creator_fee > 0 {
+        ctx.accounts.bonding_curve.sub_lamports(creator_fee)?;
+        ctx.accounts.creator_account.add_lamports(creator_fee)?;
+    }
+
+    // 3. Protocol fee (remainder)
+    let protocol_fee = remaining_fee.checked_sub(creator_fee).ok_or(MathError::Overflow)?;
+
+    if protocol_fee > 0 {
+        ctx.accounts.bonding_curve.sub_lamports(protocol_fee)?;
+        ctx.accounts.fee_vault.add_lamports(protocol_fee)?;
     }
 
     ctx.accounts.bonding_curve.virtual_sol = ctx.accounts.bonding_curve.virtual_sol.checked_sub(sol_out).ok_or(MathError::Overflow)?;
