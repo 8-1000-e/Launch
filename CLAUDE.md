@@ -7,8 +7,8 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 ## Current State
 
 - **Branch**: main (+ `programs` branch = subtree of `programs/token-lp/`)
-- **Status**: Program complete. Tests complete (28/28). Creator fees implemented (65%). Tests rewritten to use SDK. SDK bugs documented.
-- **Last updated**: 2026-02-15
+- **Status**: Program complete. Frontend SDK integration complete. Profile page uses real on-chain data.
+- **Last updated**: 2026-02-17
 - **Dev server**: `cd app/ && npx next dev --webpack --port 3001` (MUST use --webpack flag, Turbopack hangs with dual lockfiles)
 - **Frontend location**: `/Users/emile/Documents/learn/Dev Journey/Launch/app/`
 - **Backend location**: `/Users/emile/Documents/learn/Dev Journey/Launch/programs/token-lp/`
@@ -100,12 +100,16 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 - [x] Desktop scroll-snap between hero and token list (proximity, smooth)
 - [x] Create token page (`/create`) — form with color picker, banner upload, drag & drop image, buy-on-create toggle
 - [x] Leaderboard page (`/leaderboard`) — 3 tabs, animated hero stats, CSS trophy, podium, hall of fame
-- [x] Profile page (`/profile/[address]`) — procedural banner/identicon, stats, heatmap, 4 tabs
+- [x] Profile page (`/profile/[address]`) — real on-chain data (portfolio, trades, created tokens, referrals, heatmap)
 - [x] Solana wallet connection (Phantom + Solflare) — custom UI, devnet, auto-reconnect
 - [x] Navbar: real wallet modal + connected dropdown + balance display + "My Profile" link
 - [x] Profile referral dashboard: register button, referral link copy, claimable balance, claim button (own profile only)
 - [x] Unicorn Studio 3D particle background for token grid section (gold-tinted, no mouse interaction)
 - [x] Cross-fade transition: hero 3D bonding curve fades out → Unicorn Studio fades in on scroll
+- [x] SDK integration: create, trade, landing, token detail, profile — all wired to on-chain data
+- [x] Trade history + chart: real on-chain TradeEvent parsing + OHLC candles + live WebSocket updates
+- [x] Profile page: useProfileData hook (PDA-based scanning), SOL balance, activity heatmap, loading skeletons
+- [x] Helius RPC with round-robin pool (2 API keys) for rate limit management
 - [ ] Clean up orphan files: `how-it-works.tsx`, `activity-ticker.tsx`
 
 ## Fee Architecture

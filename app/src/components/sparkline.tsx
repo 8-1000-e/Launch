@@ -13,7 +13,24 @@ export function Sparkline({
   className = "",
   delay = 0,
 }: SparklineProps) {
-  if (data.length < 2) return null;
+  if (data.length < 2) {
+    // Flat line for tokens with no trade data
+    const w = 120;
+    const h = 32;
+    const y = h / 2;
+    return (
+      <svg viewBox={`0 0 ${w} ${h}`} className={className} preserveAspectRatio="none">
+        <line
+          x1="0" y1={y} x2={w} y2={y}
+          stroke="var(--text-3)"
+          strokeWidth="1"
+          vectorEffect="non-scaling-stroke"
+          strokeOpacity="0.3"
+          strokeDasharray="4 3"
+        />
+      </svg>
+    );
+  }
 
   const w = 120;
   const h = 32;

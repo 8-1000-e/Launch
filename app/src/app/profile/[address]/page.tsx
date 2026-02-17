@@ -7,11 +7,8 @@ import {
   Copy,
   Check,
   ExternalLink,
-  TrendingUp,
-  TrendingDown,
   ArrowUpRight,
   ArrowDownRight,
-  BarChart3,
   Wallet,
   Star,
   Rocket,
@@ -19,208 +16,25 @@ import {
   Activity,
   Clock,
   Gift,
-  Users,
-  Zap,
   Link2,
   Coins,
   Sparkles,
   UserPlus,
 } from "lucide-react";
 import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
+import { AnchorProvider } from "@coral-xyz/anchor";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { useToast } from "@/components/toast";
 import { useTokenLaunchpad } from "@/hooks/use-token-launchpad";
-
-/* ═══════════════════════════════════════════════
-   MOCK PROFILES
-   ═══════════════════════════════════════════════ */
-
-interface TokenHolding {
-  name: string;
-  symbol: string;
-  color: string;
-  balance: number;
-  valueSol: number;
-  pnl: number;
-  pctSupply: number;
-  sparkline: number[];
-}
-
-interface Trade {
-  time: string;
-  token: string;
-  tokenColor: string;
-  type: "buy" | "sell";
-  solAmount: number;
-  tokens: number;
-  price: number;
-  pnl: number | null;
-}
-
-interface CreatedToken {
-  name: string;
-  symbol: string;
-  color: string;
-  createdAt: string;
-  marketCap: number;
-  volume: number;
-  graduationPct: number;
-  graduated: boolean;
-}
-
-interface ReferralEntry {
-  token: string;
-  symbol: string;
-  color: string;
-  trades: number;
-  earned: number;
-}
-
-interface ProfileData {
-  address: string;
-  pnl: number;
-  winRate: number;
-  trades: number;
-  volume: number;
-  tokensCreated: number;
-  tokensGraduated: number;
-  referralEarnings: number;
-  portfolio: TokenHolding[];
-  tradeHistory: Trade[];
-  createdTokens: CreatedToken[];
-  referrals: ReferralEntry[];
-  activityMap: number[];
-}
-
-function seededRandom(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 16807 + 0) % 2147483647;
-    return (s - 1) / 2147483646;
-  };
-}
-
-function generateProfile(address: string): ProfileData {
-  const hash = address.split("").reduce((a, c) => a + c.charCodeAt(0), 0);
-  const rng = seededRandom(hash);
-
-  const isWhale = hash % 4 === 0;
-  const isDegen = hash % 4 === 1;
-  const isCreator = hash % 4 === 2;
-
-  const colors = [
-    "#c9a84c", "#22c55e", "#ef4444", "#3b82f6", "#8b5cf6",
-    "#ec4899", "#f59e0b", "#06b6d4", "#84cc16", "#f97316",
-    "#14b8a6", "#6366f1",
-  ];
-  const tokenNames = [
-    "DogWifHat", "MoonCat", "SolPepe", "BabyDegen", "GigaChad",
-    "WenLambo", "Ponke", "Bonk2", "JeetKiller", "DiamondPaws",
-    "RocketFuel", "SolGold",
-  ];
-  const tokenSymbols = [
-    "WIF", "MCAT", "SPEPE", "BDGN", "GIGA",
-    "WLMB", "PONKE", "BONK2", "JEET", "DPAW",
-    "RFUEL", "SGOLD",
-  ];
-
-  const pnl = isWhale
-    ? +(40 + rng() * 300).toFixed(2)
-    : isDegen
-      ? +(-80 + rng() * 60).toFixed(2)
-      : +(-20 + rng() * 120).toFixed(2);
-
-  const portfolioCount = Math.floor(2 + rng() * 6);
-  const portfolio: TokenHolding[] = Array.from({ length: portfolioCount }, (_, i) => {
-    const idx = Math.floor(rng() * tokenNames.length);
-    const bal = Math.floor(1000 + rng() * 5000000);
-    const val = +(0.1 + rng() * (isWhale ? 40 : 8)).toFixed(2);
-    return {
-      name: tokenNames[idx],
-      symbol: tokenSymbols[idx],
-      color: colors[idx],
-      balance: bal,
-      valueSol: val,
-      pnl: +(-30 + rng() * (isWhale ? 100 : 50)).toFixed(1),
-      pctSupply: +(rng() * (isWhale ? 5 : 1)).toFixed(2),
-      sparkline: Array.from({ length: 20 }, () => rng()),
-    };
-  });
-
-  const tradeCount = Math.floor(8 + rng() * 20);
-  const times = ["2m ago", "5m ago", "12m ago", "28m ago", "1h ago", "2h ago", "3h ago", "5h ago", "8h ago", "12h ago", "1d ago", "1d ago", "2d ago", "2d ago", "3d ago", "3d ago", "5d ago", "7d ago", "7d ago", "10d ago", "12d ago", "14d ago", "14d ago", "18d ago", "21d ago", "25d ago", "28d ago", "30d ago"];
-  const tradeHistory: Trade[] = Array.from({ length: tradeCount }, (_, i) => {
-    const idx = Math.floor(rng() * tokenNames.length);
-    const isBuy = rng() > 0.45;
-    const sol = +(0.1 + rng() * (isWhale ? 15 : 3)).toFixed(2);
-    return {
-      time: times[Math.min(i, times.length - 1)],
-      token: tokenNames[idx],
-      tokenColor: colors[idx],
-      type: isBuy ? "buy" : "sell",
-      solAmount: sol,
-      tokens: Math.floor(sol * (2000 + rng() * 50000)),
-      price: +(0.00001 + rng() * 0.01).toFixed(6),
-      pnl: !isBuy ? +(-5 + rng() * 20).toFixed(2) : null,
-    };
-  });
-
-  const createdCount = isCreator ? Math.floor(3 + rng() * 8) : Math.floor(rng() * 2);
-  const createdTokens: CreatedToken[] = Array.from({ length: createdCount }, (_, i) => {
-    const idx = Math.floor(rng() * tokenNames.length);
-    const grad = rng() > 0.6;
-    return {
-      name: `${tokenNames[idx]}${i > 0 ? i + 1 : ""}`,
-      symbol: `${tokenSymbols[idx]}${i > 0 ? i + 1 : ""}`,
-      color: colors[(idx + i) % colors.length],
-      createdAt: `${Math.floor(1 + rng() * 28)}d ago`,
-      marketCap: +(1 + rng() * 90).toFixed(1),
-      volume: +(0.5 + rng() * 50).toFixed(1),
-      graduationPct: grad ? 100 : Math.floor(5 + rng() * 90),
-      graduated: grad,
-    };
-  });
-
-  const refCount = isCreator ? Math.floor(2 + rng() * 5) : Math.floor(rng() * 2);
-  const referrals: ReferralEntry[] = Array.from({ length: refCount }, () => {
-    const idx = Math.floor(rng() * tokenNames.length);
-    return {
-      token: tokenNames[idx],
-      symbol: tokenSymbols[idx],
-      color: colors[idx],
-      trades: Math.floor(5 + rng() * 100),
-      earned: +(0.01 + rng() * 5).toFixed(3),
-    };
-  });
-
-  const activityMap = Array.from({ length: 91 }, () => {
-    const r = rng();
-    if (r < 0.35) return 0;
-    if (r < 0.55) return 1;
-    if (r < 0.75) return Math.floor(2 + rng() * 4);
-    return Math.floor(5 + rng() * 20);
-  });
-
-  const tokensGraduated = createdTokens.filter((t) => t.graduated).length;
-
-  return {
-    address,
-    pnl,
-    winRate: Math.floor(30 + rng() * 55),
-    trades: Math.floor(20 + rng() * 800),
-    volume: +(10 + rng() * (isWhale ? 5000 : 500)).toFixed(1),
-    tokensCreated: createdCount,
-    tokensGraduated,
-    referralEarnings: referrals.reduce((s, r) => s + r.earned, 0),
-    portfolio,
-    tradeHistory,
-    createdTokens,
-    referrals,
-    activityMap,
-  };
-}
+import { TokenLaunchpadClient } from "@sdk/client";
+import {
+  useProfileData,
+  type ProfileHolding,
+  type ProfileTrade,
+  type ProfileCreatedToken,
+} from "@/hooks/use-profile-data";
 
 /* ═══════════════════════════════════════════════
    HELPERS
@@ -231,12 +45,6 @@ function shorten(addr: string) {
   return addr.slice(0, 4) + "..." + addr.slice(-4);
 }
 
-function formatSol(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(1)}K`;
-  if (n >= 100) return n.toFixed(0);
-  return n.toFixed(1);
-}
-
 function formatNum(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
   if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
@@ -245,6 +53,14 @@ function formatNum(n: number): string {
 
 function walletHue(addr: string): number {
   return addr.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+}
+
+function timeAgo(timestamp: number): string {
+  const seconds = Math.floor(Date.now() / 1000) - timestamp;
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }
 
 /* ─── Animated counter hook ─── */
@@ -268,31 +84,13 @@ function useAnimatedCounter(target: number, duration = 2000) {
   return value;
 }
 
-/* ─── Mini sparkline SVG ─── */
-function MiniSparkline({ data, color }: { data: number[]; color: string }) {
-  const w = 80;
-  const h = 24;
-  const min = Math.min(...data);
-  const max = Math.max(...data) || 1;
-  const points = data
-    .map((v, i) => {
-      const x = (i / (data.length - 1)) * w;
-      const y = h - ((v - min) / (max - min)) * h;
-      return `${x},${y}`;
-    })
-    .join(" ");
-
+/* ─── Loading skeleton ─── */
+function Skeleton({ className = "" }: { className?: string }) {
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="shrink-0">
-      <polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <div
+      className={`animate-pulse bg-surface/60 ${className}`}
+      style={{ borderRadius: 2 }}
+    />
   );
 }
 
@@ -302,10 +100,10 @@ function MiniSparkline({ data, color }: { data: number[]; color: string }) {
 
 function ActivityHeatmap({ data }: { data: number[] }) {
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const weeks = 13;
   const cellSize = 14;
-  const gap = 3;
   const maxVal = Math.max(...data, 1);
 
   function intensityColor(val: number): string {
@@ -320,7 +118,7 @@ function ActivityHeatmap({ data }: { data: number[] }) {
   const days = ["Mon", "", "Wed", "", "Fri", "", ""];
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <div className="flex gap-1">
         {/* Day labels */}
         <div className="flex flex-col gap-[3px] pr-2">
@@ -355,10 +153,12 @@ function ActivityHeatmap({ data }: { data: number[] }) {
                       animation: `fade-in-up 0.3s ease-out both ${idx * 8}ms`,
                     }}
                     onMouseEnter={(e) => {
-                      const rect = e.currentTarget.getBoundingClientRect();
+                      if (!containerRef.current) return;
+                      const cellRect = e.currentTarget.getBoundingClientRect();
+                      const parentRect = containerRef.current.getBoundingClientRect();
                       setTooltip({
-                        x: rect.left + rect.width / 2,
-                        y: rect.top - 8,
+                        x: cellRect.left - parentRect.left + cellRect.width / 2,
+                        y: cellRect.top - parentRect.top - 8,
                         text: `${val} trade${val !== 1 ? "s" : ""} · ${daysAgo}d ago`,
                       });
                     }}
@@ -374,7 +174,7 @@ function ActivityHeatmap({ data }: { data: number[] }) {
       {/* Tooltip */}
       {tooltip && (
         <div
-          className="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full px-2 py-1 text-[10px] font-mono text-text-1 bg-surface border border-border shadow-lg"
+          className="pointer-events-none absolute z-50 -translate-x-1/2 -translate-y-full px-2 py-1 text-[10px] font-mono text-text-1 bg-surface border border-border shadow-lg whitespace-nowrap"
           style={{ left: tooltip.x, top: tooltip.y }}
         >
           {tooltip.text}
@@ -404,6 +204,14 @@ function ActivityHeatmap({ data }: { data: number[] }) {
 /* ═══════════════════════════════════════════════
    IDENTICON (procedural avatar from address)
    ═══════════════════════════════════════════════ */
+
+function seededRandom(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 16807 + 0) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
 
 function Identicon({ address, size = 64 }: { address: string; size?: number }) {
   const hue = walletHue(address);
@@ -464,20 +272,27 @@ export default function ProfilePage({
   const { publicKey } = useWallet();
   const isOwnProfile = publicKey?.toBase58() === address;
 
-  const profile = useMemo(() => generateProfile(address), [address]);
+  const { portfolio, tradeHistory, createdTokens, stats, activityMap, loading } =
+    useProfileData(address);
 
-  const animatedPnl = useAnimatedCounter(Math.abs(Math.floor(profile.pnl * 10)), 2000);
-  const animatedTrades = useAnimatedCounter(profile.trades, 1800);
-  const animatedVolume = useAnimatedCounter(Math.floor(profile.volume), 2200);
+  const animatedPnl = useAnimatedCounter(
+    loading ? 0 : Math.abs(Math.floor(stats.pnl * 10)),
+    2000,
+  );
+  const animatedTrades = useAnimatedCounter(loading ? 0 : stats.trades, 1800);
+  const animatedVolume = useAnimatedCounter(
+    loading ? 0 : Math.floor(stats.volume),
+    2200,
+  );
 
   const hue = walletHue(address);
 
   const hasTabs: Tab[] = useMemo(() => {
     const t: Tab[] = ["portfolio", "history"];
-    if (profile.createdTokens.length > 0) t.push("created");
-    if (profile.referrals.length > 0 || isOwnProfile) t.push("referrals");
+    if (createdTokens.length > 0) t.push("created");
+    if (isOwnProfile) t.push("referrals");
     return t;
-  }, [profile, isOwnProfile]);
+  }, [createdTokens.length, isOwnProfile]);
 
   function handleCopy() {
     navigator.clipboard.writeText(address);
@@ -636,74 +451,79 @@ export default function ProfilePage({
               {/* PnL */}
               <div style={{ animation: `fade-in-up 0.4s ease-out both 200ms` }}>
                 <p className="text-[10px] uppercase tracking-wider text-text-3">PnL</p>
-                <p
-                  className="mt-1 font-mono text-xl font-bold tabular-nums sm:text-2xl"
-                  style={{
-                    color: profile.pnl >= 0 ? "var(--buy)" : "var(--sell)",
-                    textShadow: `0 0 16px ${profile.pnl >= 0 ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
-                  }}
-                >
-                  {profile.pnl >= 0 ? "+" : "-"}
-                  {(animatedPnl / 10).toFixed(1)}
-                  <span className="ml-0.5 text-[11px] font-normal opacity-60">SOL</span>
-                </p>
+                {loading ? (
+                  <Skeleton className="mt-1 h-7 w-24" />
+                ) : (
+                  <p
+                    className="mt-1 font-mono text-xl font-bold tabular-nums sm:text-2xl"
+                    style={{
+                      color: stats.pnl >= 0 ? "var(--buy)" : "var(--sell)",
+                      textShadow: `0 0 16px ${stats.pnl >= 0 ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
+                    }}
+                  >
+                    {stats.pnl >= 0 ? "+" : "-"}
+                    {(animatedPnl / 10).toFixed(1)}
+                    <span className="ml-0.5 text-[11px] font-normal opacity-60">SOL</span>
+                  </p>
+                )}
               </div>
 
               {/* Win Rate */}
               <div style={{ animation: `fade-in-up 0.4s ease-out both 300ms` }}>
                 <p className="text-[10px] uppercase tracking-wider text-text-3">Win Rate</p>
-                <p
-                  className="mt-1 font-mono text-xl font-bold tabular-nums sm:text-2xl"
-                  style={{ color: profile.winRate >= 50 ? "var(--buy)" : "var(--sell)" }}
-                >
-                  {profile.winRate}%
-                </p>
+                {loading ? (
+                  <Skeleton className="mt-1 h-7 w-16" />
+                ) : (
+                  <p
+                    className="mt-1 font-mono text-xl font-bold tabular-nums sm:text-2xl"
+                    style={{ color: stats.winRate >= 50 ? "var(--buy)" : "var(--sell)" }}
+                  >
+                    {stats.winRate}%
+                  </p>
+                )}
               </div>
 
               {/* Trades */}
               <div style={{ animation: `fade-in-up 0.4s ease-out both 400ms` }}>
                 <p className="text-[10px] uppercase tracking-wider text-text-3">Trades</p>
-                <p className="mt-1 font-mono text-xl font-bold tabular-nums text-text-1 sm:text-2xl">
-                  {animatedTrades.toLocaleString()}
-                </p>
+                {loading ? (
+                  <Skeleton className="mt-1 h-7 w-16" />
+                ) : (
+                  <p className="mt-1 font-mono text-xl font-bold tabular-nums text-text-1 sm:text-2xl">
+                    {animatedTrades.toLocaleString()}
+                  </p>
+                )}
               </div>
 
               {/* Volume */}
               <div style={{ animation: `fade-in-up 0.4s ease-out both 500ms` }}>
                 <p className="text-[10px] uppercase tracking-wider text-text-3">Volume</p>
-                <p className="mt-1 font-mono text-xl font-bold tabular-nums text-text-1 sm:text-2xl">
-                  {animatedVolume.toLocaleString()}
-                  <span className="ml-0.5 text-[11px] font-normal text-text-3">SOL</span>
-                </p>
+                {loading ? (
+                  <Skeleton className="mt-1 h-7 w-20" />
+                ) : (
+                  <p className="mt-1 font-mono text-xl font-bold tabular-nums text-text-1 sm:text-2xl">
+                    {animatedVolume.toLocaleString()}
+                    <span className="ml-0.5 text-[11px] font-normal text-text-3">SOL</span>
+                  </p>
+                )}
               </div>
 
               {/* Tokens Created */}
-              {profile.tokensCreated > 0 && (
+              {!loading && stats.tokensCreated > 0 && (
                 <div style={{ animation: `fade-in-up 0.4s ease-out both 600ms` }}>
                   <p className="text-[10px] uppercase tracking-wider text-text-3">Created</p>
                   <p className="mt-1 font-mono text-xl font-bold tabular-nums text-text-1 sm:text-2xl">
-                    {profile.tokensCreated}
+                    {stats.tokensCreated}
                   </p>
                 </div>
               )}
 
               {/* Tokens Graduated */}
-              {profile.tokensGraduated > 0 && (
+              {!loading && stats.tokensGraduated > 0 && (
                 <div style={{ animation: `fade-in-up 0.4s ease-out both 700ms` }}>
                   <p className="text-[10px] uppercase tracking-wider text-text-3">Graduated</p>
                   <p className="mt-1 font-mono text-xl font-bold tabular-nums text-brand sm:text-2xl">
-                    {profile.tokensGraduated}
-                  </p>
-                </div>
-              )}
-
-              {/* Referral earnings */}
-              {profile.referralEarnings > 0 && (
-                <div style={{ animation: `fade-in-up 0.4s ease-out both 800ms` }}>
-                  <p className="text-[10px] uppercase tracking-wider text-text-3">Ref. Earned</p>
-                  <p className="mt-1 font-mono text-xl font-bold tabular-nums text-brand sm:text-2xl">
-                    {profile.referralEarnings.toFixed(2)}
-                    <span className="ml-0.5 text-[11px] font-normal text-text-3">SOL</span>
+                    {stats.tokensGraduated}
                   </p>
                 </div>
               )}
@@ -723,7 +543,7 @@ export default function ProfilePage({
               </h3>
               <span className="text-[10px] text-text-3">Last 91 days</span>
             </div>
-            <ActivityHeatmap data={profile.activityMap} />
+            <ActivityHeatmap data={activityMap} />
           </div>
 
           {/* ═══════════════════════════════════════════
@@ -746,8 +566,8 @@ export default function ProfilePage({
                   <Icon className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">{label}</span>
                   <span className="sm:hidden">{label.split(" ")[0]}</span>
-                  {t === "created" && (
-                    <span className="ml-1 text-[10px] text-text-3">{profile.createdTokens.length}</span>
+                  {t === "created" && !loading && (
+                    <span className="ml-1 text-[10px] text-text-3">{createdTokens.length}</span>
                   )}
                   {tab === t && (
                     <div
@@ -768,18 +588,16 @@ export default function ProfilePage({
               ═══════════════════════════════════════════ */}
           <div className="mt-6" style={{ animation: "fade-in-up 0.4s ease-out both 0.55s" }}>
             {tab === "portfolio" && (
-              <PortfolioTab portfolio={profile.portfolio} mounted={mounted} />
+              <PortfolioTab portfolio={portfolio} mounted={mounted} loading={loading} />
             )}
             {tab === "history" && (
-              <TradeHistoryTab trades={profile.tradeHistory} mounted={mounted} />
+              <TradeHistoryTab trades={tradeHistory} mounted={mounted} loading={loading} />
             )}
             {tab === "created" && (
-              <CreatedTokensTab tokens={profile.createdTokens} mounted={mounted} />
+              <CreatedTokensTab tokens={createdTokens} mounted={mounted} loading={loading} />
             )}
             {tab === "referrals" && (
               <ReferralsTab
-                referrals={profile.referrals}
-                totalEarned={profile.referralEarnings}
                 mounted={mounted}
                 isOwnProfile={isOwnProfile}
                 address={address}
@@ -798,11 +616,36 @@ export default function ProfilePage({
    PORTFOLIO TAB
    ═══════════════════════════════════════════════ */
 
-function PortfolioTab({ portfolio, mounted }: { portfolio: TokenHolding[]; mounted: boolean }) {
+function PortfolioTab({
+  portfolio,
+  mounted,
+  loading,
+}: {
+  portfolio: ProfileHolding[];
+  mounted: boolean;
+  loading: boolean;
+}) {
   const sorted = useMemo(
     () => [...portfolio].sort((a, b) => b.valueSol - a.valueSol),
     [portfolio],
   );
+
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 3 }, (_, i) => (
+          <div key={i} className="flex items-center gap-4 border border-border bg-surface/40 p-3 sm:p-4">
+            <Skeleton className="h-9 w-9 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+            <Skeleton className="h-4 w-16" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   if (sorted.length === 0) {
     return (
@@ -815,57 +658,87 @@ function PortfolioTab({ portfolio, mounted }: { portfolio: TokenHolding[]; mount
 
   return (
     <div className="space-y-2">
-      {sorted.map((token, i) => (
-        <div
-          key={`${token.symbol}-${i}`}
-          className="group flex items-center gap-4 border border-border bg-surface/40 p-3 sm:p-4 transition-colors hover:bg-surface-hover/50 hover:border-border-hover"
-          style={{
-            animation: mounted ? `fade-in-up 0.3s ease-out both ${i * 50}ms` : "none",
-          }}
-        >
-          {/* Token avatar */}
-          <div
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-bg"
-            style={{ background: token.color }}
-          >
-            {token.symbol.charAt(0)}
-          </div>
+      {sorted.map((token, i) => {
+        const avatarHue = token.name.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
 
-          {/* Name + symbol */}
-          <div className="min-w-0 flex-1">
-            <p className="text-[13px] font-medium text-text-1 truncate">{token.name}</p>
-            <p className="text-[11px] font-mono text-text-3">${token.symbol}</p>
-          </div>
+        const inner = (
+          <>
+            {/* Token avatar */}
+            {token.isSol ? (
+              <img
+                src="https://raw.githubusercontent.com/solana-labs/token-list/main/assets/mainnet/So11111111111111111111111111111111111111112/logo.png"
+                alt="SOL"
+                className="h-9 w-9 shrink-0 rounded-full"
+              />
+            ) : token.image ? (
+              <img
+                src={token.image}
+                alt={token.symbol}
+                className="h-9 w-9 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-bg"
+                style={{ background: `hsl(${avatarHue}, 55%, 50%)` }}
+              >
+                {token.symbol.charAt(0)}
+              </div>
+            )}
 
-          {/* Sparkline */}
-          <div className="hidden sm:block">
-            <MiniSparkline data={token.sparkline} color={token.color} />
-          </div>
+            {/* Name + symbol */}
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-text-1 truncate">{token.name}</p>
+              <p className="text-[11px] font-mono text-text-3">${token.symbol}</p>
+            </div>
 
-          {/* Balance */}
-          <div className="text-right hidden md:block">
-            <p className="font-mono text-[12px] tabular-nums text-text-2">
-              {formatNum(token.balance)}
-            </p>
-            <p className="text-[10px] text-text-3">{token.pctSupply}% supply</p>
-          </div>
+            {/* Balance */}
+            <div className="text-right hidden md:block">
+              <p className="font-mono text-[12px] tabular-nums text-text-2">
+                {token.isSol ? token.balance.toFixed(4) : formatNum(token.balance)}
+              </p>
+              {!token.isSol && (
+                <p className="text-[10px] text-text-3">{token.pctSupply}% supply</p>
+              )}
+            </div>
 
-          {/* Value */}
-          <div className="text-right min-w-[70px]">
-            <p className="font-mono text-[13px] font-medium tabular-nums text-text-1">
-              {token.valueSol.toFixed(2)}
-              <span className="ml-0.5 text-[10px] font-normal text-text-3">SOL</span>
-            </p>
-            <p
-              className="font-mono text-[11px] tabular-nums font-medium"
-              style={{ color: token.pnl >= 0 ? "var(--buy)" : "var(--sell)" }}
-            >
-              {token.pnl >= 0 ? "+" : ""}
-              {token.pnl.toFixed(1)}%
-            </p>
-          </div>
-        </div>
-      ))}
+            {/* Value */}
+            <div className="text-right min-w-[70px]">
+              <p className="font-mono text-[13px] font-medium tabular-nums text-text-1">
+                {token.valueSol.toFixed(2)}
+                <span className="ml-0.5 text-[10px] font-normal text-text-3">SOL</span>
+              </p>
+              {!token.isSol && (
+                <p
+                  className="font-mono text-[11px] tabular-nums font-medium"
+                  style={{ color: token.pnl >= 0 ? "var(--buy)" : "var(--sell)" }}
+                >
+                  {token.pnl >= 0 ? "+" : ""}
+                  {token.pnl.toFixed(1)}%
+                </p>
+              )}
+            </div>
+          </>
+        );
+
+        const className = "group flex items-center gap-4 border border-border bg-surface/40 p-3 sm:p-4 transition-colors hover:bg-surface-hover/50 hover:border-border-hover";
+        const style = {
+          animation: mounted ? `fade-in-up 0.3s ease-out both ${i * 50}ms` : "none",
+        };
+
+        if (token.isSol) {
+          return (
+            <div key={token.mint} className={className} style={style}>
+              {inner}
+            </div>
+          );
+        }
+
+        return (
+          <Link key={token.mint} href={`/token/${token.mint}`} className={className} style={style}>
+            {inner}
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -874,7 +747,60 @@ function PortfolioTab({ portfolio, mounted }: { portfolio: TokenHolding[]; mount
    TRADE HISTORY TAB
    ═══════════════════════════════════════════════ */
 
-function TradeHistoryTab({ trades, mounted }: { trades: Trade[]; mounted: boolean }) {
+/** Price with subscript notation for very small values: 0.0₅123 */
+function TradePrice({ value }: { value: number }) {
+  if (value === 0) return <>0</>;
+  if (value >= 1) return <>{value.toFixed(4)}</>;
+  if (value >= 0.001) return <>{value.toFixed(6)}</>;
+
+  // Very small: subscript notation
+  const str = value.toFixed(20);
+  const dot = str.indexOf(".");
+  let zeros = 0;
+  for (let i = dot + 1; i < str.length; i++) {
+    if (str[i] !== "0") break;
+    zeros++;
+  }
+  const sigDigits = str.slice(dot + 1 + zeros, dot + 1 + zeros + 4).replace(/0+$/, "") || "0";
+
+  return (
+    <>0.0<sub className="text-[0.65em] opacity-60">{zeros}</sub>{sigDigits}</>
+  );
+}
+
+function TradeHistoryTab({
+  trades,
+  mounted,
+  loading,
+}: {
+  trades: ProfileTrade[];
+  mounted: boolean;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="border border-border bg-surface/40 p-4 space-y-3">
+        {Array.from({ length: 5 }, (_, i) => (
+          <div key={i} className="flex items-center gap-4">
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-6 w-6 rounded-full" />
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-4 w-12 ml-auto" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (trades.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-text-3">
+        <Activity className="h-8 w-8 mb-3 opacity-40" />
+        <p className="text-[13px]">No trades found</p>
+      </div>
+    );
+  }
+
   return (
     <div className="border border-border bg-surface/40 overflow-hidden">
       <div className="overflow-x-auto">
@@ -886,78 +812,81 @@ function TradeHistoryTab({ trades, mounted }: { trades: Trade[]; mounted: boolea
               <th className="py-3 px-2 font-medium">Type</th>
               <th className="py-3 px-2 font-medium text-right">SOL</th>
               <th className="py-3 px-2 font-medium text-right hidden sm:table-cell">Tokens</th>
-              <th className="py-3 px-2 font-medium text-right hidden md:table-cell">Price</th>
-              <th className="py-3 pl-2 pr-4 font-medium text-right">PnL</th>
+              <th className="py-3 pl-2 pr-4 font-medium text-right hidden md:table-cell">Price</th>
             </tr>
           </thead>
           <tbody>
-            {trades.map((trade, i) => (
-              <tr
-                key={i}
-                className="border-b border-border/50 transition-colors hover:bg-surface-hover/50 last:border-0"
-                style={{
-                  animation: mounted ? `fade-in-up 0.3s ease-out both ${i * 30}ms` : "none",
-                }}
-              >
-                <td className="py-2.5 pl-4 pr-2">
-                  <span className="text-[11px] text-text-3 flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {trade.time}
-                  </span>
-                </td>
-                <td className="py-2.5 px-2">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-bg"
-                      style={{ background: trade.tokenColor }}
-                    >
-                      {trade.token.charAt(0)}
-                    </div>
-                    <span className="text-[12px] font-medium text-text-1 truncate max-w-[80px]">
-                      {trade.token}
+            {trades.map((trade, i) => {
+              const avatarHue = trade.tokenName.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+              return (
+                <tr
+                  key={trade.signature}
+                  className="border-b border-border/50 transition-colors hover:bg-surface-hover/50 last:border-0"
+                  style={{
+                    animation: mounted ? `fade-in-up 0.3s ease-out both ${i * 30}ms` : "none",
+                  }}
+                >
+                  <td className="py-2.5 pl-4 pr-2">
+                    <span className="text-[11px] text-text-3 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {timeAgo(trade.timestamp)}
                     </span>
-                  </div>
-                </td>
-                <td className="py-2.5 px-2">
-                  <span
-                    className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold uppercase"
-                    style={{
-                      background: trade.type === "buy" ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
-                      color: trade.type === "buy" ? "var(--buy)" : "var(--sell)",
-                    }}
-                  >
-                    {trade.type === "buy" ? (
-                      <ArrowUpRight className="h-2.5 w-2.5" />
-                    ) : (
-                      <ArrowDownRight className="h-2.5 w-2.5" />
-                    )}
-                    {trade.type}
-                  </span>
-                </td>
-                <td className="py-2.5 px-2 text-right font-mono text-[12px] font-medium tabular-nums text-text-1">
-                  {trade.solAmount.toFixed(2)}
-                </td>
-                <td className="py-2.5 px-2 text-right font-mono text-[11px] tabular-nums text-text-2 hidden sm:table-cell">
-                  {formatNum(trade.tokens)}
-                </td>
-                <td className="py-2.5 px-2 text-right font-mono text-[11px] tabular-nums text-text-3 hidden md:table-cell">
-                  {trade.price.toFixed(6)}
-                </td>
-                <td className="py-2.5 pl-2 pr-4 text-right">
-                  {trade.pnl !== null ? (
+                  </td>
+                  <td className="py-2.5 px-2">
+                    <Link
+                      href={`/token/${trade.mint}`}
+                      className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                    >
+                      {trade.tokenImage ? (
+                        <img
+                          src={trade.tokenImage}
+                          alt={trade.tokenSymbol}
+                          className="h-6 w-6 shrink-0 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-bg"
+                          style={{ background: `hsl(${avatarHue}, 55%, 50%)` }}
+                        >
+                          {trade.tokenName.charAt(0)}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-medium text-text-1 truncate max-w-[80px]">
+                          {trade.tokenName}
+                        </p>
+                        <p className="text-[10px] font-mono text-text-3">${trade.tokenSymbol}</p>
+                      </div>
+                    </Link>
+                  </td>
+                  <td className="py-2.5 px-2">
                     <span
-                      className="font-mono text-[12px] font-medium tabular-nums"
-                      style={{ color: trade.pnl >= 0 ? "var(--buy)" : "var(--sell)" }}
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-semibold uppercase"
+                      style={{
+                        background: trade.type === "buy" ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)",
+                        color: trade.type === "buy" ? "var(--buy)" : "var(--sell)",
+                      }}
                     >
-                      {trade.pnl >= 0 ? "+" : ""}
-                      {trade.pnl.toFixed(2)}
+                      {trade.type === "buy" ? (
+                        <ArrowUpRight className="h-2.5 w-2.5" />
+                      ) : (
+                        <ArrowDownRight className="h-2.5 w-2.5" />
+                      )}
+                      {trade.type}
                     </span>
-                  ) : (
-                    <span className="text-[11px] text-text-3">-</span>
-                  )}
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="py-2.5 px-2 text-right font-mono text-[12px] font-medium tabular-nums text-text-1">
+                    {trade.solAmount.toFixed(2)}
+                  </td>
+                  <td className="py-2.5 px-2 text-right font-mono text-[11px] tabular-nums text-text-2 hidden sm:table-cell">
+                    {formatNum(trade.tokenAmount)}
+                  </td>
+                  <td className="py-2.5 pl-2 pr-4 text-right font-mono text-[11px] tabular-nums text-text-3 hidden md:table-cell">
+                    <TradePrice value={trade.price} />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -969,11 +898,41 @@ function TradeHistoryTab({ trades, mounted }: { trades: Trade[]; mounted: boolea
    CREATED TOKENS TAB
    ═══════════════════════════════════════════════ */
 
-function CreatedTokensTab({ tokens, mounted }: { tokens: CreatedToken[]; mounted: boolean }) {
+function CreatedTokensTab({
+  tokens,
+  mounted,
+  loading,
+}: {
+  tokens: ProfileCreatedToken[];
+  mounted: boolean;
+  loading: boolean;
+}) {
   const sorted = useMemo(
-    () => [...tokens].sort((a, b) => (b.graduated ? 1 : 0) - (a.graduated ? 1 : 0) || b.marketCap - a.marketCap),
+    () =>
+      [...tokens].sort(
+        (a, b) =>
+          (b.graduated ? 1 : 0) - (a.graduated ? 1 : 0) ||
+          b.virtualSol - a.virtualSol,
+      ),
     [tokens],
   );
+
+  if (loading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 3 }, (_, i) => (
+          <div key={i} className="flex items-center gap-4 border border-border bg-surface/40 p-3 sm:p-4">
+            <Skeleton className="h-9 w-9 rounded-full" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-3 w-16" />
+            </div>
+            <Skeleton className="h-4 w-16" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   if (sorted.length === 0) {
     return (
@@ -986,77 +945,77 @@ function CreatedTokensTab({ tokens, mounted }: { tokens: CreatedToken[]; mounted
 
   return (
     <div className="space-y-2">
-      {sorted.map((token, i) => (
-        <div
-          key={`${token.symbol}-${i}`}
-          className="group flex items-center gap-4 border border-border bg-surface/40 p-3 sm:p-4 transition-colors hover:bg-surface-hover/50 hover:border-border-hover"
-          style={{
-            animation: mounted ? `fade-in-up 0.3s ease-out both ${i * 50}ms` : "none",
-          }}
-        >
-          {/* Token avatar */}
-          <div
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-bg"
-            style={{ background: token.color }}
+      {sorted.map((token, i) => {
+        const avatarHue = token.name.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+        return (
+          <Link
+            key={token.mint}
+            href={`/token/${token.mint}`}
+            className="group flex items-center gap-4 border border-border bg-surface/40 p-3 sm:p-4 transition-colors hover:bg-surface-hover/50 hover:border-border-hover"
+            style={{
+              animation: mounted ? `fade-in-up 0.3s ease-out both ${i * 50}ms` : "none",
+            }}
           >
-            {token.symbol.charAt(0)}
-          </div>
-
-          {/* Name + symbol */}
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="text-[13px] font-medium text-text-1 truncate">{token.name}</p>
-              {token.graduated && (
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wider bg-status-graduated/12 text-status-graduated">
-                  <Star className="h-2 w-2" />
-                  GRAD
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] font-mono text-text-3">
-              ${token.symbol}
-              <span className="ml-2 text-text-3/60">{token.createdAt}</span>
-            </p>
-          </div>
-
-          {/* MCap */}
-          <div className="text-right hidden sm:block">
-            <p className="font-mono text-[12px] font-medium tabular-nums text-text-1">
-              {token.marketCap.toFixed(1)}
-              <span className="ml-0.5 text-[10px] font-normal text-text-3">SOL</span>
-            </p>
-            <p className="text-[10px] text-text-3">MCap</p>
-          </div>
-
-          {/* Volume */}
-          <div className="text-right hidden md:block">
-            <p className="font-mono text-[12px] tabular-nums text-text-2">
-              {token.volume.toFixed(1)}
-              <span className="ml-0.5 text-[10px] font-normal text-text-3">SOL</span>
-            </p>
-            <p className="text-[10px] text-text-3">Volume</p>
-          </div>
-
-          {/* Graduation progress */}
-          <div className="flex items-center gap-2 min-w-[90px]">
-            <div className="relative h-[4px] w-14 bg-border/50 overflow-hidden">
-              <div
-                className={`absolute inset-y-0 left-0 ${
-                  token.graduated
-                    ? "bg-status-graduated"
-                    : token.graduationPct > 80
-                      ? "bg-status-graduating"
-                      : "bg-buy/60"
-                }`}
-                style={{ width: `${token.graduationPct}%` }}
+            {/* Token avatar */}
+            {token.image ? (
+              <img
+                src={token.image}
+                alt={token.symbol}
+                className="h-9 w-9 shrink-0 rounded-full object-cover"
               />
+            ) : (
+              <div
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-bg"
+                style={{ background: `hsl(${avatarHue}, 55%, 50%)` }}
+              >
+                {token.symbol.charAt(0)}
+              </div>
+            )}
+
+            {/* Name + symbol */}
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="text-[13px] font-medium text-text-1 truncate">{token.name}</p>
+                {token.graduated && (
+                  <span className="inline-flex items-center gap-0.5 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wider bg-status-graduated/12 text-status-graduated">
+                    <Star className="h-2 w-2" />
+                    GRAD
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] font-mono text-text-3">${token.symbol}</p>
             </div>
-            <span className="font-mono text-[10px] tabular-nums text-text-3 w-7 text-right">
-              {token.graduationPct}%
-            </span>
-          </div>
-        </div>
-      ))}
+
+            {/* Virtual SOL */}
+            <div className="text-right hidden sm:block">
+              <p className="font-mono text-[12px] font-medium tabular-nums text-text-1">
+                {token.virtualSol.toFixed(1)}
+                <span className="ml-0.5 text-[10px] font-normal text-text-3">SOL</span>
+              </p>
+              <p className="text-[10px] text-text-3">Pool</p>
+            </div>
+
+            {/* Graduation progress */}
+            <div className="flex items-center gap-2 min-w-[90px]">
+              <div className="relative h-[4px] w-14 bg-border/50 overflow-hidden">
+                <div
+                  className={`absolute inset-y-0 left-0 ${
+                    token.graduated
+                      ? "bg-status-graduated"
+                      : token.graduationPct > 80
+                        ? "bg-status-graduating"
+                        : "bg-buy/60"
+                  }`}
+                  style={{ width: `${token.graduationPct}%` }}
+                />
+              </div>
+              <span className="font-mono text-[10px] tabular-nums text-text-3 w-7 text-right">
+                {token.graduationPct}%
+              </span>
+            </div>
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -1066,46 +1025,55 @@ function CreatedTokensTab({ tokens, mounted }: { tokens: CreatedToken[]; mounted
    ═══════════════════════════════════════════════ */
 
 function ReferralsTab({
-  referrals,
-  totalEarned,
   mounted,
   isOwnProfile,
   address,
 }: {
-  referrals: ReferralEntry[];
-  totalEarned: number;
   mounted: boolean;
   isOwnProfile: boolean;
   address: string;
 }) {
-  const { client, connected } = useTokenLaunchpad();
+  const { connection } = useConnection();
+  const { client: walletClient, connected } = useTokenLaunchpad();
   const toast = useToast();
   const [linkCopied, setLinkCopied] = useState(false);
-  const [isRegistered, setIsRegistered] = useState(referrals.length > 0);
+  const [isRegistered, setIsRegistered] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [claiming, setClaiming] = useState(false);
-  const [onChainEarned, setOnChainEarned] = useState<number | null>(null);
+  const [onChainEarned, setOnChainEarned] = useState<number>(0);
+  const [onChainTradeCount, setOnChainTradeCount] = useState<number>(0);
+  const [loadingRef, setLoadingRef] = useState(true);
 
-  // Try to fetch real referral data from on-chain
+  // Read-only client for fetching referral data (works without wallet)
+  const readClient = useMemo(() => {
+    const provider = new AnchorProvider(
+      connection,
+      { publicKey: PublicKey.default, signTransaction: async (tx: any) => tx, signAllTransactions: async (txs: any) => txs } as any,
+      { commitment: "confirmed" },
+    );
+    return new TokenLaunchpadClient(provider);
+  }, [connection]);
+
+  // Use wallet client for write operations, read client for reads
+  const client = walletClient || readClient;
+
   useEffect(() => {
     async function fetchReferral() {
-      if (!client) return;
+      setLoadingRef(true);
       try {
-        const ref = await client.getReferral(new PublicKey(address));
+        const ref = await readClient.getReferral(new PublicKey(address));
         setIsRegistered(true);
         setOnChainEarned(ref.totalEarned.toNumber() / LAMPORTS_PER_SOL);
+        setOnChainTradeCount(ref.tradeCount.toNumber());
       } catch {
-        // Account doesn't exist — not registered
-        setIsRegistered(referrals.length > 0);
+        setIsRegistered(false);
+      } finally {
+        setLoadingRef(false);
       }
     }
     fetchReferral();
-  }, [client, address, referrals.length]);
+  }, [readClient, address]);
 
-  const displayEarned = onChainEarned ?? totalEarned;
-  const claimableBalance = displayEarned * 0.3; // Approximate — real value would come from PDA balance
-
-  const totalTrades = referrals.reduce((s, r) => s + r.trades, 0);
   const referralLink = typeof window !== "undefined"
     ? `${window.location.origin}/?ref=${address}`
     : `https://launch.app/?ref=${address}`;
@@ -1117,13 +1085,13 @@ function ReferralsTab({
   }
 
   async function handleRegister() {
-    if (!client || !connected) {
+    if (!walletClient || !connected) {
       toast.error("Please connect your wallet first.");
       return;
     }
     setRegistering(true);
     try {
-      await client.registerReferral();
+      await walletClient.registerReferral();
       setIsRegistered(true);
       toast.success("Registered as referrer");
     } catch (err: unknown) {
@@ -1135,17 +1103,35 @@ function ReferralsTab({
   }
 
   async function handleClaim() {
-    if (claimableBalance <= 0 || !client || !connected) return;
+    if (onChainEarned <= 0 || !walletClient || !connected) return;
     setClaiming(true);
     try {
-      await client.claimReferralFees();
-      toast.success(`Claimed ${claimableBalance.toFixed(3)} SOL`);
+      await walletClient.claimReferralFees();
+      toast.success(`Claimed referral fees`);
+      // Refresh
+      const ref = await readClient.getReferral(new PublicKey(address));
+      setOnChainEarned(ref.totalEarned.toNumber() / LAMPORTS_PER_SOL);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Claim failed";
       toast.error(message);
     } finally {
       setClaiming(false);
     }
+  }
+
+  if (loadingRef) {
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-3">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className="border border-border bg-surface/40 p-3">
+              <Skeleton className="h-3 w-20 mb-2" />
+              <Skeleton className="h-6 w-16" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   // ── Not registered + own profile ──
@@ -1199,8 +1185,8 @@ function ReferralsTab({
     );
   }
 
-  // ── Not own profile + no referrals ──
-  if (referrals.length === 0 && !isOwnProfile) {
+  // ── Not own profile + not registered ──
+  if (!isRegistered && !isOwnProfile) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-text-3">
         <Gift className="h-8 w-8 mb-3 opacity-40" />
@@ -1250,14 +1236,14 @@ function ReferralsTab({
       )}
 
       {/* ── Summary cards ── */}
-      <div className={`grid gap-3 mb-6 ${isOwnProfile ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3"}`}>
+      <div className={`grid gap-3 mb-6 ${isOwnProfile ? "grid-cols-2" : "grid-cols-2"}`}>
         <div
           className="border border-border bg-surface/40 p-3"
           style={{ animation: "fade-in-up 0.3s ease-out both" }}
         >
           <p className="text-[10px] uppercase tracking-wider text-text-3">Total Earned</p>
           <p className="mt-1 font-mono text-lg font-bold tabular-nums text-brand">
-            {displayEarned.toFixed(3)}
+            {onChainEarned.toFixed(3)}
             <span className="ml-0.5 text-[10px] font-normal text-text-3">SOL</span>
           </p>
         </div>
@@ -1267,48 +1253,21 @@ function ReferralsTab({
         >
           <p className="text-[10px] uppercase tracking-wider text-text-3">Referred Trades</p>
           <p className="mt-1 font-mono text-lg font-bold tabular-nums text-text-1">
-            {totalTrades}
+            {onChainTradeCount}
           </p>
         </div>
-        <div
-          className="border border-border bg-surface/40 p-3"
-          style={{ animation: "fade-in-up 0.3s ease-out both 200ms" }}
-        >
-          <p className="text-[10px] uppercase tracking-wider text-text-3">Tokens Referred</p>
-          <p className="mt-1 font-mono text-lg font-bold tabular-nums text-text-1">
-            {referrals.length}
-          </p>
-        </div>
-
-        {/* Claimable Balance (own profile only) */}
-        {isOwnProfile && (
-          <div
-            className="border border-border bg-surface/40 p-3"
-            style={{ animation: "fade-in-up 0.3s ease-out both 300ms" }}
-          >
-            <p className="text-[10px] uppercase tracking-wider text-text-3">Claimable</p>
-            <p className="mt-1 font-mono text-lg font-bold tabular-nums text-buy">
-              {claimableBalance.toFixed(3)}
-              <span className="ml-0.5 text-[10px] font-normal text-text-3">SOL</span>
-            </p>
-          </div>
-        )}
       </div>
 
       {/* ── Claim Button (own profile only) ── */}
-      {isOwnProfile && (
+      {isOwnProfile && onChainEarned > 0 && (
         <div
           className="mb-6"
           style={{ animation: "fade-in-up 0.3s ease-out both 350ms" }}
         >
           <button
             onClick={handleClaim}
-            disabled={claimableBalance <= 0 || claiming}
-            className={`w-full flex items-center justify-center gap-2 py-3 text-[14px] font-semibold transition-all ${
-              claimableBalance > 0
-                ? "bg-brand/10 text-brand border border-brand/30 hover:bg-brand/20 hover:scale-[1.005] active:scale-[0.995]"
-                : "bg-surface/40 text-text-3 border border-border cursor-not-allowed"
-            }`}
+            disabled={claiming}
+            className="w-full flex items-center justify-center gap-2 py-3 text-[14px] font-semibold transition-all bg-brand/10 text-brand border border-brand/30 hover:bg-brand/20 hover:scale-[1.005] active:scale-[0.995] disabled:opacity-60"
           >
             {claiming ? (
               <>
@@ -1318,58 +1277,10 @@ function ReferralsTab({
             ) : (
               <>
                 <Coins className="h-4 w-4" />
-                Claim {claimableBalance.toFixed(3)} SOL
+                Claim Referral Fees
               </>
             )}
           </button>
-        </div>
-      )}
-
-      {/* ── Referral list ── */}
-      {referrals.length > 0 && (
-        <div className="border border-border bg-surface/40 overflow-hidden">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="border-b border-border text-[10px] uppercase tracking-wider text-text-3">
-                <th className="py-3 pl-4 pr-2 font-medium">Token</th>
-                <th className="py-3 px-2 font-medium text-right">Trades</th>
-                <th className="py-3 pl-2 pr-4 font-medium text-right">Earned</th>
-              </tr>
-            </thead>
-            <tbody>
-              {referrals.map((ref, i) => (
-                <tr
-                  key={i}
-                  className="border-b border-border/50 transition-colors hover:bg-surface-hover/50 last:border-0"
-                  style={{
-                    animation: mounted ? `fade-in-up 0.3s ease-out both ${i * 50}ms` : "none",
-                  }}
-                >
-                  <td className="py-2.5 pl-4 pr-2">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[9px] font-bold text-bg"
-                        style={{ background: ref.color }}
-                      >
-                        {ref.symbol.charAt(0)}
-                      </div>
-                      <div>
-                        <span className="text-[12px] font-medium text-text-1">{ref.token}</span>
-                        <span className="ml-1.5 text-[10px] font-mono text-text-3">${ref.symbol}</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-2.5 px-2 text-right font-mono text-[12px] tabular-nums text-text-2">
-                    {ref.trades}
-                  </td>
-                  <td className="py-2.5 pl-2 pr-4 text-right font-mono text-[13px] font-semibold tabular-nums text-brand">
-                    +{ref.earned.toFixed(3)}
-                    <span className="ml-0.5 text-[10px] font-normal text-text-3">SOL</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
         </div>
       )}
     </div>

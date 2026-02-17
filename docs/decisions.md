@@ -231,3 +231,30 @@
 **Decision**: SDK wraps all `.rpc()` calls in `sendTx()` which catches errors and passes them through `parseError()`. `parseError()` extracts `AnchorError` from `SendTransactionError.logs` using `AnchorError.parse(logs)`.
 **Rationale**: Frontend needs proper error codes (e.g., `SlippageExceeded`) for UX. This is a client-side fix for an Anchor bug.
 **Skill created**: `~/.claude/skills/brain-dump/extracted/anchor-sdk-error-parsing-wrapper/SKILL.md`
+
+## 2026-02-17 — Read-only AnchorProvider for walletless data fetching
+**Context**: Profile page showed no data when wallet not connected. `useTokenLaunchpad()` returns `client: null` without wallet.
+**Decision**: Create a read-only `AnchorProvider` with `PublicKey.default` dummy wallet inside data-fetching hooks. Don't depend on `useTokenLaunchpad()` for reads.
+**Rationale**: Reading accounts doesn't require a wallet signature. Visitors should see profile data without connecting.
+**Skill created**: `~/.claude/skills/brain-dump/extracted/solana-readonly-anchor-provider/SKILL.md`
+
+## 2026-02-17 — PDA-based signature scanning over wallet scanning
+**Context**: Scanning `getSignaturesForAddress(walletAddress)` returned 1000+ signatures, each needing `getParsedTransaction` → massive 429 rate limits.
+**Decision**: Scan bonding curve PDAs instead of wallet. List all curves → scan each PDA → filter trades by wallet address.
+**Rationale**: Wallet has 1000 sigs (all activity). 4 bonding curve PDAs had 6 total sigs. 160x fewer RPC calls.
+**Skill created**: `~/.claude/skills/brain-dump/extracted/solana-pda-scanning-optimization/SKILL.md`
+
+## 2026-02-17 — Helius RPC with round-robin key pool
+**Context**: Single Helius API key hit rate limits during profile data loading.
+**Decision**: RPC pool with round-robin across multiple Helius keys (`NEXT_PUBLIC_HELIUS_API_KEY`, `NEXT_PUBLIC_HELIUS_API_KEY_2`). Each connection request uses a different key.
+**Rationale**: Distributes load across rate limit buckets. Third key (`0f803376`) was dead on arrival — verify keys before adding.
+
+## 2026-02-17 — Heatmap tooltip: absolute over fixed positioning
+**Context**: Activity heatmap tooltip appeared "at the other end of the screen" when hovering cells.
+**Decision**: Use `absolute` positioning relative to heatmap container ref, not `fixed` with `getBoundingClientRect()`.
+**Rationale**: `fixed` + `getBoundingClientRect()` breaks when page is scrolled. Container-relative `absolute` positioning is scroll-safe.
+
+## 2026-02-17 — Profile page: all mock data removed
+**Context**: Profile page used `seededRandom` + `generateProfile` to create fake data from wallet address hash.
+**Decision**: Remove ALL mock data. New `useProfileData` hook fetches everything from chain. Only `seededRandom` kept for Identicon color generation.
+**Rationale**: Real data is now available on devnet. Mock data created false expectations.

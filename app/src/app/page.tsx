@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { Search, ArrowUpDown, ChevronDown, ArrowRight, Rocket, TrendingUp, Zap, Loader2 } from "lucide-react";
-import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { PublicKey, LAMPORTS_PER_SOL, Connection } from "@solana/web3.js";
 import { Navbar } from "@/components/navbar";
 import { Hero } from "@/components/hero";
 
@@ -10,23 +10,9 @@ import { Footer } from "@/components/footer";
 import { TokenCard, type TokenData } from "@/components/token-card";
 import { useTokenLaunchpad } from "@/hooks/use-token-launchpad";
 import { fetchBatchMetadata } from "@/hooks/use-token-metadata";
+import { useSolPrice } from "@/hooks/use-sol-price";
+import { parseTradeFromLog } from "@/hooks/use-trade-data";
 import { DEFAULT_GRADUATION_THRESHOLD } from "@sdk/constants";
-
-/* ─── Deterministic sparkline data generator ─── */
-
-function spark(seed: number, up: boolean): number[] {
-  const d: number[] = [];
-  let v = 40 + ((seed * 13) % 25);
-  for (let i = 0; i < 20; i++) {
-    v +=
-      (up ? 0.5 : -0.3) +
-      Math.sin(i * 1.2 + seed * 3.7) * 4 +
-      Math.cos(i * 0.7 + seed * 2.1) * 3;
-    v = Math.max(8, Math.min(92, v));
-    d.push(Math.round(v * 10) / 10);
-  }
-  return d;
-}
 
 /* ─── Colors for token icons ─── */
 
@@ -38,6 +24,86 @@ const C = [
 
 const TOKEN_DECIMALS = 1_000_000;
 const GRADUATION_SOL = DEFAULT_GRADUATION_THRESHOLD.toNumber() / LAMPORTS_PER_SOL;
+
+/* ─── Helius RPC key rotation ─── */
+
+const HELIUS_KEYS = [
+  process.env.NEXT_PUBLIC_HELIUS_API_KEY,
+  process.env.NEXT_PUBLIC_HELIUS_API_KEY_2,
+].filter(Boolean) as string[];
+
+let _keyIndex = 0;
+function getRotatingConnection(): Connection {
+  const key = HELIUS_KEYS[_keyIndex % HELIUS_KEYS.length];
+  _keyIndex++;
+  return new Connection(`https://devnet.helius-rpc.com/?api-key=${key}`, "confirmed");
+}
+
+/* ─── Trade data fetching for token list ─── */
+
+const TRADES_PER_TOKEN = 10;
+const ENRICH_DELAY_MS = 2000; // reduced — rotation spreads load across keys
+const BETWEEN_TOKEN_DELAY_MS = 400; // reduced — 3 keys = 3x budget
+
+async function fetchRecentTrades(
+  connection: import("@solana/web3.js").Connection,
+  mint: string,
+): Promise<{ volume24h: number; priceChange24h: number; sparkData: number[] }> {
+  const { getBondingCurvePda } = await import("@sdk/pda");
+  const mintPk = new PublicKey(mint);
+  const pda = getBondingCurvePda(mintPk);
+
+  // 1 RPC call: get recent signatures
+  const signatures = await connection.getSignaturesForAddress(pda, { limit: TRADES_PER_TOKEN });
+  if (signatures.length === 0) return { volume24h: 0, priceChange24h: 0, sparkData: [] };
+
+  // 1 RPC call: batch fetch all transactions at once
+  const txs = await connection.getParsedTransactions(
+    signatures.map((s) => s.signature),
+    { maxSupportedTransactionVersion: 0 },
+  );
+
+  const now = Math.floor(Date.now() / 1000);
+  const dayAgo = now - 86400;
+
+  let volume24h = 0;
+  const prices: { time: number; price: number }[] = [];
+
+  for (let i = 0; i < txs.length; i++) {
+    const tx = txs[i];
+    if (!tx?.meta?.logMessages) continue;
+
+    const blockTime = tx.blockTime ?? 0;
+    const dataLogs = tx.meta.logMessages.filter((l) => l.startsWith("Program data: "));
+
+    for (const log of dataLogs) {
+      const trade = parseTradeFromLog(log, signatures[i].signature, blockTime);
+      if (!trade) continue;
+
+      prices.push({ time: trade.timestamp, price: trade.price });
+      if (trade.timestamp >= dayAgo) {
+        volume24h += trade.amountSol;
+      }
+    }
+  }
+
+  if (prices.length === 0) return { volume24h: 0, priceChange24h: 0, sparkData: [] };
+
+  // Sort chronologically
+  prices.sort((a, b) => a.time - b.time);
+
+  const firstPrice = prices[0].price;
+  const lastPrice = prices[prices.length - 1].price;
+  const priceChange24h = firstPrice > 0
+    ? ((lastPrice - firstPrice) / firstPrice) * 100
+    : 0;
+
+  // Sparkline: up to 20 evenly-spaced price points
+  const step = Math.max(1, Math.floor(prices.length / 20));
+  const sparkData = prices.filter((_, idx) => idx % step === 0).map((p) => p.price);
+
+  return { volume24h, priceChange24h, sparkData };
+}
 
 /* ─── Filter / sort ─── */
 
@@ -68,8 +134,10 @@ export default function Home() {
 
   /* ─── On-chain token data ─── */
   const { client, connection } = useTokenLaunchpad();
+  const solUsd = useSolPrice();
   const [onChainTokens, setOnChainTokens] = useState<TokenData[]>([]);
   const [loadingTokens, setLoadingTokens] = useState(true);
+  const enrichedRef = useRef(false);
 
   useEffect(() => {
     async function fetchTokens() {
@@ -135,11 +203,12 @@ export default function Home() {
             creator: bc.creator.toBase58(),
             createdAgo: "on-chain",
             color: meta?.extensions?.color || C[hash % C.length],
-            sparkData: spark(hash, price > 0.00003),
+            sparkData: [],
             image: meta?.image || null,
           };
         });
 
+        enrichedRef.current = false;
         setOnChainTokens(mapped);
       } catch (err) {
         console.error("Failed to fetch tokens:", err);
@@ -151,18 +220,70 @@ export default function Home() {
     fetchTokens();
   }, [client, connection]);
 
-  /* ─── Scroll tracking for parallax & transitions ─── */
-  const [scrollY, setScrollY] = useState(0);
-  const [heroH, setHeroH] = useState(800);
+  /* ─── Enrich tokens with real trade data (runs after initial load) ─── */
+  useEffect(() => {
+    if (onChainTokens.length === 0 || enrichedRef.current) return;
+    enrichedRef.current = true;
+
+    let cancelled = false;
+
+    async function enrichTokens() {
+      // Wait for rate limit to recover after metadata fetch
+      console.log(`[enrichTokens] waiting ${ENRICH_DELAY_MS}ms for rate limit to recover...`);
+      await new Promise((r) => setTimeout(r, ENRICH_DELAY_MS));
+      if (cancelled) return;
+
+      try {
+        // Process tokens one at a time with delays to stay within rate limits
+        const results: ({ volume24h: number; priceChange24h: number; sparkData: number[] } | null)[] = [];
+
+        for (let i = 0; i < onChainTokens.length; i++) {
+          if (cancelled) return;
+
+          try {
+            // Rotate across Helius keys so each token hits a different key
+            const conn = HELIUS_KEYS.length > 0 ? getRotatingConnection() : connection;
+            const data = await fetchRecentTrades(conn, onChainTokens[i].id);
+            results.push(data);
+            console.log(`[enrichTokens] ${i + 1}/${onChainTokens.length} done (${onChainTokens[i].symbol}) [key ${((_keyIndex - 1) % HELIUS_KEYS.length) + 1}/${HELIUS_KEYS.length}]`);
+          } catch (err) {
+            console.warn(`[enrichTokens] failed for ${onChainTokens[i].symbol}:`, err);
+            results.push(null);
+          }
+
+          // Pause between tokens to avoid rate limiting
+          if (i < onChainTokens.length - 1) {
+            await new Promise((r) => setTimeout(r, BETWEEN_TOKEN_DELAY_MS));
+          }
+        }
+
+        if (cancelled) return;
+
+        let enrichedCount = 0;
+        setOnChainTokens((prev) =>
+          prev.map((token, i) => {
+            const data = results[i];
+            if (!data || data.sparkData.length === 0) return token;
+            enrichedCount++;
+            return { ...token, volume24h: data.volume24h, priceChange24h: data.priceChange24h, sparkData: data.sparkData };
+          }),
+        );
+        console.log(`[enrichTokens] enriched ${enrichedCount}/${onChainTokens.length} tokens with trade data`);
+      } catch (err) {
+        console.error("[enrichTokens] failed:", err);
+      }
+    }
+
+    enrichTokens();
+    return () => { cancelled = true; };
+  }, [onChainTokens, connection]);
+
+  /* ─── Responsive detection ─── */
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const mobile = window.innerWidth < 640;
     setIsMobile(mobile);
-    setHeroH(mobile ? 400 : window.innerHeight * 0.85);
-
-    // Enable snap scroll on home page only (desktop)
-    if (!mobile) document.documentElement.classList.add("snap-page");
 
     // Load Unicorn Studio
     if (!(window as any).UnicornStudio) {
@@ -178,32 +299,9 @@ export default function Home() {
       };
       document.head.appendChild(script);
     } else if ((window as any).UnicornStudio?.init) {
-      // Re-init if script already loaded (e.g. navigation back)
       (window as any).UnicornStudio.init();
     }
-
-    let ticking = false;
-    function onScroll() {
-      if (!ticking) {
-        requestAnimationFrame(() => {
-          setScrollY(window.scrollY);
-          ticking = false;
-        });
-        ticking = true;
-      }
-    }
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      document.documentElement.classList.remove("snap-page");
-      window.removeEventListener("scroll", onScroll);
-    };
   }, []);
-
-  const scrollProgress = Math.min(1, Math.max(0, scrollY / heroH));
-  const tokenProgress = Math.min(
-    1,
-    Math.max(0, (scrollProgress - 0.3) / 0.5),
-  );
 
   const tokens = useMemo(() => {
     let list = [...onChainTokens];
@@ -243,14 +341,8 @@ export default function Home() {
 
   return (
     <div className="relative min-h-screen">
-      {/* ── Background effects — 0.3x parallax ── */}
-      <div
-        className="pointer-events-none fixed inset-0"
-        style={{
-          transform: `translateY(${-scrollY * 0.3}px)`,
-          willChange: "transform",
-        }}
-      >
+      {/* ── Background effects (static, no parallax) ── */}
+      <div className="pointer-events-none fixed inset-0">
         {/* Large ambient gradient */}
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_55%_at_50%_-5%,rgba(201,168,76,0.16),transparent_60%)]" />
         {/* Secondary warm glow bottom-right */}
@@ -283,38 +375,25 @@ export default function Home() {
         />
       </div>
 
-      {/* Noise grain texture (no parallax — stays fixed) */}
+      {/* Noise grain texture */}
       <div className="noise-overlay" />
 
-      {/* ── Unicorn Studio 3D background ── */}
-      <div
-        className="pointer-events-none fixed inset-0"
-        style={isMobile ? { opacity: 1 } : {
-          // Desktop: cross-fade starts at 20% scroll, full at 55%
-          opacity: Math.min(1, Math.max(0, (scrollProgress - 0.2) / 0.35)),
-          willChange: "opacity",
-        }}
-      >
+      {/* ── Unicorn Studio 3D background (always visible) ── */}
+      <div className="pointer-events-none fixed inset-0">
         <div
           data-us-project="cqcLtDwfoHqqRPttBbQE"
           data-us-disablemouse
           className="absolute inset-0"
           style={{ filter: "sepia(1) saturate(2) hue-rotate(5deg) brightness(0.85)" }}
         />
-        {/* Readability overlay — darker on mobile for text legibility */}
         <div className={`absolute inset-0 ${isMobile ? "bg-bg/60" : "bg-bg/30"}`} />
       </div>
 
-      {/* ── Floating CTA — appears after scrolling past hero ── */}
+      {/* ── Floating CTA ── */}
       <a
         href="/create"
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 overflow-hidden px-5 py-3 text-[13px] font-semibold text-bg shadow-lg transition-all duration-300 hover:scale-105 active:scale-95"
-        style={{
-          opacity: scrollProgress > 0.5 ? 1 : 0,
-          transform: `translateY(${scrollProgress > 0.5 ? 0 : 20}px)`,
-          pointerEvents: scrollProgress > 0.5 ? "auto" : "none",
-          animation: scrollProgress > 0.5 ? "pulse-glow 3s ease-in-out infinite" : "none",
-        }}
+        className="fixed bottom-6 right-6 z-50 hidden sm:flex items-center gap-2 overflow-hidden px-5 py-3 text-[13px] font-semibold text-bg shadow-lg transition-all duration-300 hover:scale-105 active:scale-95"
+        style={{ animation: "pulse-glow 3s ease-in-out infinite" }}
       >
         <span
           className="absolute inset-0 bg-gradient-to-r from-brand via-brand-bright to-brand"
@@ -331,9 +410,7 @@ export default function Home() {
       {/* ── Content ── */}
       <div className="relative">
         <Navbar />
-        <div className="snap-section">
-          <Hero scrollProgress={scrollProgress} scrollY={scrollY} />
-        </div>
+        <Hero />
 
         {/* ── Mobile inline header (no hero section) ── */}
         {isMobile && (
@@ -389,15 +466,7 @@ export default function Home() {
           </div>
         )}
 
-        <main
-          className="snap-section mx-auto max-w-7xl px-4 sm:px-6 pt-4 sm:pt-8 pb-20"
-          style={isMobile ? {} : {
-            opacity: Math.min(1, tokenProgress * 1.8),
-            transform: `translateY(${Math.max(0, (1 - tokenProgress) * 100)}px) scale(${0.92 + tokenProgress * 0.08})`,
-            transformOrigin: "top center",
-            willChange: "opacity, transform",
-          }}
-        >
+        <main className="mx-auto max-w-7xl px-4 sm:px-6 pt-4 sm:pt-8 pb-20">
           {/* ── Search ── */}
           <div className="relative">
             <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-3" />
@@ -478,23 +547,14 @@ export default function Home() {
 
           {/* ── Grid ── */}
           <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3 xl:grid-cols-4">
-            {tokens.map((token, i) => {
-              const cardP = isMobile
-                ? 1
-                : Math.min(1, Math.max(0, (tokenProgress - i * 0.05) / 0.2));
-              return (
-                <div
-                  key={token.id}
-                  style={isMobile ? { animation: `count-fade 0.4s ease-out both ${i * 50}ms` } : {
-                    opacity: cardP,
-                    transform: `translateY(${(1 - cardP) * 60}px) scale(${0.9 + cardP * 0.1})`,
-                    willChange: "opacity, transform",
-                  }}
-                >
-                  <TokenCard token={token} index={i} />
-                </div>
-              );
-            })}
+            {tokens.map((token, i) => (
+              <div
+                key={token.id}
+                style={{ animation: `count-fade 0.4s ease-out both ${i * 50}ms` }}
+              >
+                <TokenCard token={token} index={i} solUsd={solUsd} />
+              </div>
+            ))}
           </div>
 
           {loadingTokens && (

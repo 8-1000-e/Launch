@@ -1,41 +1,50 @@
-# Current Task — SDK Complete + All Tests Passing (2026-02-15)
+# Current Task — Profile Page Real Data Complete (2026-02-17)
 
 ## What Was Done This Session
 
-### 1. Final Bug Fixes from Audit
-- Fixed `referral_fee` u128→u64 cast in buy.rs, sell.rs, create_and_buy.rs
-- Added `require!(status != ProgramPaused)` to `migrate_to_raydium.rs`
-- Changed `Clock::get()?.unix_timestamp as u64` to `u64::try_from(...)` (safe cast)
+### 1. Created `useProfileData` Hook
+**File**: `app/src/hooks/use-profile-data.ts`
 
-### 2. Creator Fee Implementation (65%)
-- Three-way fee distribution on every buy/sell:
-  1. Creator gets `creator_share_bps` (65%) of total fee → `creator_account`
-  2. Referral gets `referral_share_bps` (10%) of remainder → referral PDA
-  3. Protocol gets the rest → `fee_vault`
-- `creator_account: SystemAccount` added to Buy/Sell structs with `constraint = key() == bonding_curve.creator`
-- In `create_and_buy.rs`: creator fee calculated but transfer skipped (creator == signer)
+New hook that fetches all profile data for a given wallet address:
+- **Trade history**: Scans bonding curve PDAs (NOT wallet) for signatures → parses TradeEvent logs
+- **Token holdings**: `getTokenAccountsByOwner` + cross-reference with `listAllBondingCurves()` + current price
+- **Created tokens**: `listAllBondingCurves()` filtered by `curve.creator === address`
+- **SOL balance**: `connection.getBalance()`
+- **PnL**: Cost basis from trade history vs current bonding curve price
+- **Stats**: trades count, volume, win rate — derived from trade history
+- **Activity heatmap**: Trades grouped by day (last 91 days)
 
-### 3. Tests Rewritten Using SDK
-- `clientFor(keypair)` creates per-user `AnchorProvider` + `TokenLaunchpadClient`
-- `expectRevert()` handles broken error translator (accepts "Unknown action" as fallback)
-- All 4 test files use SDK methods — 28/28 passing
-- New test: SDK math verification (`calculateBuyAmount` matches on-chain)
+Key design: Creates its own read-only AnchorProvider with `PublicKey.default` dummy wallet — doesn't depend on wallet connection for reads.
 
-### 4. SDK Bugs Found, Reported & Fixed
-5 bugs found through testing, reported in pod DISCUSSION.md, all fixed by Emile:
-1. Error parsing → `parseError()` + `sendTx()` wrapper
-2. Empty package.json → fixed by Ganymede (me)
-3. Export typo `clients` → `client`
-4. allowOwnerOffCurve → Anchor 0.32 auto-resolves ATAs
-5. Double fetch → optional `creator?: PublicKey` param
+RPC pool: Round-robin across 2 Helius API keys (`NEXT_PUBLIC_HELIUS_API_KEY`, `NEXT_PUBLIC_HELIUS_API_KEY_2`).
 
-### 5. SDK Written by Emile ✅
-- `constants.ts`, `types.ts`, `pda.ts`, `math.ts`, `client.ts`, `index.ts`
-- All 5 bugs fixed
-- Compiles clean with `npx tsc --noEmit`
+### 2. Rewrote Profile Page
+**File**: `app/src/app/profile/[address]/page.tsx`
+
+- Removed ALL mock data generation (`generateProfile`, `seededRandom`, mock interfaces)
+- Wired `useProfileData(address)` for portfolio, trades, created tokens, stats, heatmap
+- Added loading skeletons for all sections
+- Portfolio shows SOL balance with official Solana logo + token holdings with PnL
+- Trade history links to `/token/[mint]` with `timeAgo()` timestamps
+- Created tokens show virtualSol progress
+- Referrals tab creates its own read-only client for data + uses wallet client for write ops
+- Activity heatmap tooltip: fixed positioning (was broken with `fixed`, now `absolute` relative to container)
+
+### 3. Key Bugs Fixed
+1. **No data without wallet**: Read-only AnchorProvider pattern (see skill: `solana-readonly-anchor-provider`)
+2. **429 rate limits**: PDA-based scanning instead of wallet scanning (see skill: `solana-pda-scanning-optimization`)
+3. **Heatmap tooltip wrong position**: `fixed` → `absolute` positioning with container ref offset
+4. **Missing SOL logo**: Added official Solana logo from token-list CDN
 
 ## What's Next
-1. Migration tests (`05_migration.test.ts`)
-2. Close instruction (reclaim bonding curve rent after migration)
-3. Delayed `open_time` in migration (anti-snipe for Raydium pool)
-4. Connect frontend to real program (devnet deploy)
+1. Verify profile page works correctly after all fixes (restart dev server)
+2. Clean up orphan files (`how-it-works.tsx`, `activity-ticker.tsx`)
+3. Migration tests (`05_migration.test.ts`)
+4. Leaderboard: connect to real data (needs indexer or on-chain aggregation)
+
+## Key Files Modified
+- `app/src/hooks/use-profile-data.ts` (NEW)
+- `app/src/app/profile/[address]/page.tsx` (REWRITTEN)
+- `app/src/components/wallet-provider.tsx` (Helius RPC endpoint)
+- `app/.env.local` (API keys)
+- `app/.env.local.example` (documented vars)

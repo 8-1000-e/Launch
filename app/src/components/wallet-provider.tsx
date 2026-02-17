@@ -20,7 +20,12 @@ export function WalletProviderWrapper({
 }: {
   children: React.ReactNode;
 }) {
-  const endpoint = useMemo(() => clusterApiUrl("devnet"), []);
+  const endpoint = useMemo(() => {
+    const key = process.env.NEXT_PUBLIC_HELIUS_API_KEY;
+    return key
+      ? `https://devnet.helius-rpc.com/?api-key=${key}`
+      : clusterApiUrl("devnet");
+  }, []);
 
   const wallets = useMemo(
     () => [new PhantomWalletAdapter(), new SolflareWalletAdapter()],

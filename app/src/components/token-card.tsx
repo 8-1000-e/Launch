@@ -23,18 +23,35 @@ export interface TokenData {
 
 /* ── Formatting helpers ── */
 
-function formatPrice(sol: number): string {
-  if (sol >= 1000) return `${(sol / 1000).toFixed(1)}K`;
-  if (sol >= 1) return sol.toFixed(2);
-  if (sol >= 0.01) return sol.toFixed(4);
-  return sol.toFixed(6);
+/** Renders a price with subscript notation for very small values: 0.0₅123 */
+function PriceDisplay({ sol }: { sol: number }) {
+  if (sol >= 1000) return <>{(sol / 1000).toFixed(1)}K</>;
+  if (sol >= 1) return <>{sol.toFixed(2)}</>;
+  if (sol >= 0.01) return <>{sol.toFixed(4)}</>;
+  if (sol >= 0.000001) return <>{sol.toFixed(6)}</>;
+  if (sol === 0) return <>0</>;
+
+  // Very small: subscript notation 0.0₅123
+  const str = sol.toFixed(20);
+  const dot = str.indexOf(".");
+  let zeros = 0;
+  for (let i = dot + 1; i < str.length; i++) {
+    if (str[i] !== "0") break;
+    zeros++;
+  }
+  const sigDigits = str.slice(dot + 1 + zeros, dot + 1 + zeros + 4).replace(/0+$/, "") || "0";
+
+  return (
+    <>0.0<sub className="text-[0.65em] opacity-60">{zeros}</sub>{sigDigits}</>
+  );
 }
 
-function formatSol(sol: number): string {
-  if (sol >= 1000) return `${(sol / 1000).toFixed(1)}K`;
-  if (sol >= 100) return sol.toFixed(0);
-  if (sol >= 1) return sol.toFixed(1);
-  return sol.toFixed(2);
+function formatUsd(usd: number): string {
+  if (usd >= 1_000_000) return `$${(usd / 1_000_000).toFixed(1)}M`;
+  if (usd >= 1_000) return `$${(usd / 1_000).toFixed(1)}K`;
+  if (usd >= 1) return `$${usd.toFixed(0)}`;
+  if (usd >= 0.01) return `$${usd.toFixed(2)}`;
+  return `<$0.01`;
 }
 
 function truncAddr(addr: string): string {
@@ -77,11 +94,14 @@ function Badge({ status }: { status: TokenData["status"] }) {
 export function TokenCard({
   token,
   index = 0,
+  solUsd,
 }: {
   token: TokenData;
   index?: number;
+  solUsd?: number | null;
 }) {
   const positive = token.priceChange24h >= 0;
+  const hasChange = token.priceChange24h !== 0;
   const entranceDelay = index * 55;
 
   // Animate progress bar after mount
@@ -143,19 +163,23 @@ export function TokenCard({
         {/* ── Price row ── */}
         <div className="mt-3 flex items-baseline justify-between">
           <span className="font-mono text-lg font-semibold tabular-nums text-text-1">
-            {formatPrice(token.price)}
+            <PriceDisplay sol={token.price} />
             <span className="ml-1 text-[11px] font-normal text-text-3">
               SOL
             </span>
           </span>
-          <span
-            className={`font-mono text-[13px] font-medium tabular-nums ${
-              positive ? "text-buy" : "text-sell"
-            }`}
-          >
-            {positive ? "+" : ""}
-            {token.priceChange24h.toFixed(1)}%
-          </span>
+          {hasChange ? (
+            <span
+              className={`font-mono text-[13px] font-medium tabular-nums ${
+                positive ? "text-buy" : "text-sell"
+              }`}
+            >
+              {positive ? "+" : ""}
+              {token.priceChange24h.toFixed(1)}%
+            </span>
+          ) : (
+            <span className="text-[11px] text-text-3/60 italic">no trades</span>
+          )}
         </div>
       </div>
 
@@ -177,7 +201,9 @@ export function TokenCard({
             MCap
           </p>
           <p className="font-mono text-[13px] tabular-nums text-text-2">
-            {formatSol(token.marketCap)}
+            {solUsd
+              ? formatUsd(token.marketCap * solUsd)
+              : `${token.marketCap >= 1000 ? `${(token.marketCap / 1000).toFixed(1)}K` : token.marketCap >= 1 ? token.marketCap.toFixed(1) : token.marketCap.toFixed(2)} SOL`}
           </p>
         </div>
         <div>
@@ -185,7 +211,11 @@ export function TokenCard({
             Vol 24h
           </p>
           <p className="font-mono text-[13px] tabular-nums text-text-2">
-            {formatSol(token.volume24h)}
+            {solUsd && token.volume24h > 0
+              ? formatUsd(token.volume24h * solUsd)
+              : token.volume24h > 0
+                ? `${token.volume24h >= 1000 ? `${(token.volume24h / 1000).toFixed(1)}K` : token.volume24h.toFixed(2)} SOL`
+                : <span className="not-italic text-text-3/60">—</span>}
           </p>
         </div>
       </div>

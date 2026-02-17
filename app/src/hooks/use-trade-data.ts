@@ -2,9 +2,22 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { PublicKey, LAMPORTS_PER_SOL, Connection } from "@solana/web3.js";
 import { BN } from "@coral-xyz/anchor";
 import { getBondingCurvePda } from "@sdk/pda";
+
+/* ─── Helius RPC key rotation (shared with page.tsx) ─── */
+const HELIUS_KEYS = [
+  process.env.NEXT_PUBLIC_HELIUS_API_KEY,
+  process.env.NEXT_PUBLIC_HELIUS_API_KEY_2,
+].filter(Boolean) as string[];
+
+let _keyIdx = 0;
+function getRotatingConnection(): Connection {
+  const key = HELIUS_KEYS[_keyIdx % HELIUS_KEYS.length];
+  _keyIdx++;
+  return new Connection(`https://devnet.helius-rpc.com/?api-key=${key}`, "confirmed");
+}
 
 /* ─── Trade Event parsing (browser-safe, no Node crypto) ─── */
 
@@ -57,7 +70,7 @@ function shortenAddr(addr: string): string {
   return addr.slice(0, 4) + "…" + addr.slice(-4);
 }
 
-function parseTradeFromLog(logLine: string, signature: string, blockTime: number): TradeData | null {
+export function parseTradeFromLog(logLine: string, signature: string, blockTime: number): TradeData | null {
   const base64Data = logLine.slice("Program data: ".length);
   const buffer = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
 
@@ -122,28 +135,29 @@ export function useTradeData(mint: string) {
       for (let page = 0; page < MAX_PAGES; page++) {
         if (abortRef.current) return;
 
+        // Rotate keys across pages to spread rate limit
+        const conn = HELIUS_KEYS.length > 0 ? getRotatingConnection() : connection;
+
         const opts: { limit: number; before?: string } = { limit: PAGE_SIZE };
         if (beforeSig) opts.before = beforeSig;
 
-        const signatures = await connection.getSignaturesForAddress(pda, opts);
+        const signatures = await conn.getSignaturesForAddress(pda, opts);
         if (signatures.length === 0) break;
 
-        for (const sig of signatures) {
-          if (abortRef.current) return;
+        // Batch fetch all transactions at once (1 RPC call instead of N)
+        const txs = await conn.getParsedTransactions(
+          signatures.map((s) => s.signature),
+          { maxSupportedTransactionVersion: 0 },
+        );
 
-          try {
-            const tx = await connection.getParsedTransaction(sig.signature, {
-              maxSupportedTransactionVersion: 0,
-            });
-            if (!tx?.meta?.logMessages) continue;
+        for (let i = 0; i < txs.length; i++) {
+          const tx = txs[i];
+          if (!tx?.meta?.logMessages) continue;
 
-            const dataLogs = tx.meta.logMessages.filter((l) => l.startsWith("Program data: "));
-            for (const log of dataLogs) {
-              const trade = parseTradeFromLog(log, sig.signature, tx.blockTime ?? 0);
-              if (trade) allParsed.push(trade);
-            }
-          } catch {
-            // Skip individual tx errors
+          const dataLogs = tx.meta.logMessages.filter((l) => l.startsWith("Program data: "));
+          for (const log of dataLogs) {
+            const trade = parseTradeFromLog(log, signatures[i].signature, tx.blockTime ?? 0);
+            if (trade) allParsed.push(trade);
           }
         }
 
@@ -151,6 +165,9 @@ export function useTradeData(mint: string) {
 
         // No more pages
         if (signatures.length < PAGE_SIZE) break;
+
+        // Small delay between pages to avoid rate limiting
+        await new Promise((r) => setTimeout(r, 300));
       }
 
       if (!abortRef.current) {

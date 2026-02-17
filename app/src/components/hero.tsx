@@ -125,13 +125,7 @@ function BondingCurveFallback() {
 
 /* ── Hero Component ── */
 
-export function Hero({
-  scrollProgress = 0,
-  scrollY = 0,
-}: {
-  scrollProgress?: number;
-  scrollY?: number;
-}) {
+export function Hero() {
   const tokensCount = useCounter(1247, 1400, 400);
   const volumeCount = useCounter(4521, 1400, 600);
   const graduatingCount = useCounter(3, 600, 800);
@@ -146,14 +140,6 @@ export function Hero({
   /* ── Mobile: no hero section, handled inline in page.tsx ── */
   if (isMobile) return null;
 
-  /* ── Scroll-linked values ── */
-  const canvasFade = Math.max(0, 1 - Math.pow(Math.min(1, scrollProgress / 0.6), 1.5));
-  const canvasBlur = Math.pow(Math.min(1, scrollProgress / 0.5), 2) * 20;
-  const canvasScale = 1 + scrollProgress * 0.15;
-  const textFade = Math.max(0, 1 - scrollProgress * 1.5);
-  const textShift = -scrollProgress * 100;
-  const textScale = 1 - scrollProgress * 0.08;
-
   const chart3D = canHandle3D ? (
     <BondingCurve3D onPriceUpdate={handlePriceUpdate} />
   ) : (
@@ -163,16 +149,7 @@ export function Hero({
   return (
     <section className="relative h-[85vh] min-h-[600px] overflow-hidden">
       {/* ── 3D Canvas background ── */}
-      <div
-        className="absolute inset-0"
-        style={{
-          opacity: canvasFade,
-          filter: canvasBlur > 0.5 ? `blur(${canvasBlur}px)` : "none",
-          transform: `translateY(${scrollY * 0.5}px) scale(${canvasScale})`,
-          transformOrigin: "center center",
-          willChange: "opacity, filter, transform",
-        }}
-      >
+      <div className="absolute inset-0">
         {chart3D}
       </div>
 
@@ -182,125 +159,109 @@ export function Hero({
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#0c0a09]/40 to-transparent h-[30%]" />
 
       {/* ── Content overlay ── */}
-      <div
-        style={{
-          opacity: textFade,
-          transform: `translateY(${textShift}px) scale(${textScale})`,
-          transformOrigin: "left center",
-          willChange: "opacity, transform",
-        }}
-      >
-        <div className="relative z-10 flex h-[85vh] min-h-[600px] items-center">
-          <div className="mx-auto max-w-7xl w-full px-6">
-            <div className="max-w-lg">
-              {/* Headline */}
-              <h1
-                className="font-display text-4xl font-bold tracking-tight lg:text-5xl"
-                style={{
-                  animation: "count-fade 0.7s ease-out both 100ms",
-                  background:
-                    "linear-gradient(135deg, var(--brand) 0%, var(--text-1) 35%, var(--text-1) 65%, var(--brand-bright) 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                Launch tokens.
-                <br />
-                Watch them fly.
-              </h1>
+      <div className="relative z-10 flex h-[85vh] min-h-[600px] items-center">
+        <div className="mx-auto max-w-7xl w-full px-6">
+          <div className="max-w-lg">
+            {/* Headline */}
+            <h1
+              className="font-display text-4xl font-bold tracking-tight lg:text-5xl"
+              style={{
+                animation: "count-fade 0.7s ease-out both 100ms",
+                background:
+                  "linear-gradient(135deg, var(--brand) 0%, var(--text-1) 35%, var(--text-1) 65%, var(--brand-bright) 100%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+              }}
+            >
+              Launch tokens.
+              <br />
+              Watch them fly.
+            </h1>
 
-              <p
-                className="mt-3 max-w-md text-[14px] leading-relaxed text-text-3"
-                style={{ animation: "count-fade 0.6s ease-out both 250ms" }}
-              >
-                Create meme tokens on Solana with automatic bonding curves.
-                Trade instantly. Graduate to Raydium.
-              </p>
+            <p
+              className="mt-3 max-w-md text-[14px] leading-relaxed text-text-3"
+              style={{ animation: "count-fade 0.6s ease-out both 250ms" }}
+            >
+              Create meme tokens on Solana with automatic bonding curves.
+              Trade instantly. Graduate to Raydium.
+            </p>
 
-              {/* Stats */}
-              <div className="mt-8 flex flex-wrap items-start gap-10">
-                <div
-                  style={{ animation: "count-fade 0.5s ease-out both 400ms" }}
-                >
-                  <div className="flex items-center gap-2">
-                    <Rocket className="h-4 w-4 text-brand" />
-                    <p className="font-mono text-3xl font-bold tabular-nums text-brand">
-                      {tokensCount.toLocaleString()}
-                    </p>
-                  </div>
-                  <p className="mt-1 text-[10px] uppercase tracking-widest text-text-3">
-                    tokens launched
-                  </p>
-                </div>
-
-                <div
-                  style={{ animation: "count-fade 0.5s ease-out both 550ms" }}
-                >
-                  <div className="flex items-center gap-2">
-                    <TrendingUp className="h-4 w-4 text-text-3" />
-                    <p className="font-mono text-3xl font-bold tabular-nums text-text-1">
-                      {volumeCount.toLocaleString()}
-                    </p>
-                  </div>
-                  <p className="mt-1 text-[10px] uppercase tracking-widest text-text-3">
-                    SOL volume
-                  </p>
-                </div>
-
-                <div
-                  style={{ animation: "count-fade 0.5s ease-out both 700ms" }}
-                >
-                  <div className="flex items-center gap-2">
-                    <Zap className="h-4 w-4 text-status-graduating" />
-                    <p className="font-mono text-3xl font-bold tabular-nums text-status-graduating">
-                      {graduatingCount}
-                    </p>
-                  </div>
-                  <p className="mt-1 text-[10px] uppercase tracking-widest text-text-3">
-                    graduating now
-                  </p>
-                </div>
-              </div>
-
-              {/* CTA */}
+            {/* Stats */}
+            <div className="mt-8 flex flex-wrap items-start gap-10">
               <div
-                className="mt-10"
-                style={{ animation: "count-fade 0.5s ease-out both 800ms" }}
+                style={{ animation: "count-fade 0.5s ease-out both 400ms" }}
               >
-                <a
-                  href="/create"
-                  className="group relative inline-flex items-center gap-2.5 overflow-hidden px-7 py-3.5 text-sm font-semibold text-bg transition-transform hover:scale-[1.03] active:scale-[0.97]"
-                  style={{ animation: "pulse-glow 3s ease-in-out infinite" }}
-                >
-                  <span
-                    className="absolute inset-0 bg-gradient-to-r from-brand via-brand-bright to-brand"
-                    style={{
-                      backgroundSize: "200% 100%",
-                      animation: "gradient-x 4s ease infinite",
-                    }}
-                  />
-                  <span className="relative font-display">
-                    Launch a token
-                  </span>
-                  <ArrowRight className="relative h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </a>
+                <div className="flex items-center gap-2">
+                  <Rocket className="h-4 w-4 text-brand" />
+                  <p className="font-mono text-3xl font-bold tabular-nums text-brand">
+                    {tokensCount.toLocaleString()}
+                  </p>
+                </div>
+                <p className="mt-1 text-[10px] uppercase tracking-widest text-text-3">
+                  tokens launched
+                </p>
               </div>
 
+              <div
+                style={{ animation: "count-fade 0.5s ease-out both 550ms" }}
+              >
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-text-3" />
+                  <p className="font-mono text-3xl font-bold tabular-nums text-text-1">
+                    {volumeCount.toLocaleString()}
+                  </p>
+                </div>
+                <p className="mt-1 text-[10px] uppercase tracking-widest text-text-3">
+                  SOL volume
+                </p>
+              </div>
+
+              <div
+                style={{ animation: "count-fade 0.5s ease-out both 700ms" }}
+              >
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-status-graduating" />
+                  <p className="font-mono text-3xl font-bold tabular-nums text-status-graduating">
+                    {graduatingCount}
+                  </p>
+                </div>
+                <p className="mt-1 text-[10px] uppercase tracking-widest text-text-3">
+                  graduating now
+                </p>
+              </div>
             </div>
+
+            {/* CTA */}
+            <div
+              className="mt-10"
+              style={{ animation: "count-fade 0.5s ease-out both 800ms" }}
+            >
+              <a
+                href="/create"
+                className="group relative inline-flex items-center gap-2.5 overflow-hidden px-7 py-3.5 text-sm font-semibold text-bg transition-transform hover:scale-[1.03] active:scale-[0.97]"
+                style={{ animation: "pulse-glow 3s ease-in-out infinite" }}
+              >
+                <span
+                  className="absolute inset-0 bg-gradient-to-r from-brand via-brand-bright to-brand"
+                  style={{
+                    backgroundSize: "200% 100%",
+                    animation: "gradient-x 4s ease infinite",
+                  }}
+                />
+                <span className="relative font-display">
+                  Launch a token
+                </span>
+                <ArrowRight className="relative h-4 w-4 transition-transform group-hover:translate-x-1" />
+              </a>
+            </div>
+
           </div>
         </div>
       </div>
 
       {/* ── Scroll indicator ── */}
-      <div
-        className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1"
-        style={{
-          opacity: Math.max(0, 1 - scrollProgress * 4),
-          transition: "opacity 0.15s",
-          pointerEvents: scrollProgress > 0.15 ? "none" : "auto",
-        }}
-      >
+      <div className="absolute bottom-6 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1">
         <span className="text-[10px] uppercase tracking-[0.2em] text-text-3">
           Explore tokens
         </span>

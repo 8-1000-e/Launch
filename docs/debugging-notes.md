@@ -164,3 +164,35 @@ Build error: `referral_fee` is u128 but used in u64 lamport operations.
 `referral_fee` computed as u128 (from multiplication chain) but never cast down. The existing `let fee = u64::try_from(fee)` was a no-op (fee already u64).
 ### Fix
 Replace with `let referral_fee = u64::try_from(referral_fee).map_err(|_| MathError::CastOverflow)?;` in buy.rs, sell.rs, create_and_buy.rs.
+
+## Profile Page: No Data Without Wallet (2026-02-17)
+### Symptoms
+- Profile page at `/profile/[address]` shows completely empty — no portfolio, no trades, no stats
+- Works fine when wallet is connected
+- No errors in console
+### Root Cause
+`useTokenLaunchpad()` returns `client: null` when no wallet is connected. The `useProfileData` hook had `if (!client) return;` as its first line, bailing before any data fetch.
+### Fix
+Created a read-only `AnchorProvider` with `PublicKey.default` dummy wallet directly inside `useProfileData`. This provider can read all accounts without a wallet signature.
+### Gotcha
+Same pattern needed in ReferralsTab — it also calls `client.getReferral()` for display data.
+
+## Profile Page: 429 Rate Limits on Helius (2026-02-17)
+### Symptoms
+- Helius RPC returns HTTP 429 in rapid succession
+- Profile page never finishes loading
+- Console shows hundreds of failed `getParsedTransaction` calls
+### Root Cause
+Scanning `getSignaturesForAddress(walletAddress)` returned 1000+ signatures (ALL wallet activity — transfers, swaps, NFTs, etc.). Each needed a `getParsedTransaction` call to check if it contained a TradeEvent.
+### Fix
+Scan bonding curve PDAs instead of wallet address. List all curves → get signatures for each PDA → parse trades → filter by wallet. Wallet had 1000 sigs; 4 PDAs had 6 total.
+### Gotcha
+Helius key `0f803376-0189-4d72-95f6-a5f41cef157d` was permanently 429'd ("max usage reached"). Always test individual keys with `curl` before adding to pool.
+
+## Heatmap Tooltip Positioning (2026-02-17)
+### Symptom
+Activity heatmap tooltip appears "at the other end of the screen" instead of near the hovered cell.
+### Root Cause
+Used `position: fixed` with `getBoundingClientRect()` — coordinates are viewport-relative but don't account for scroll position when the element is in a scrollable container.
+### Fix
+Switched to `position: absolute` relative to the heatmap container using a `containerRef`. Compute offset as `cellRect.left - parentRect.left` and `cellRect.top - parentRect.top`.

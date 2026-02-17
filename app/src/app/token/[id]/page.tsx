@@ -647,8 +647,8 @@ export default function TokenDetailPage({
                 <StatCard
                   icon={TrendingUp}
                   label="Market Cap"
-                  value={`${marketCap.toFixed(1)} SOL`}
-                  sub={formatUsd(marketCap, solUsd)}
+                  value={formatUsd(marketCap, solUsd) || `${marketCap.toFixed(1)} SOL`}
+                  sub={solUsd ? `${marketCap.toFixed(1)} SOL` : undefined}
                 />
                 <StatCard
                   icon={BarChart3}
