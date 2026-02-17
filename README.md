@@ -66,16 +66,35 @@ programs/token-lp/src/
 **UI by Claude Opus 4.6.** 3D WebGL bonding curve visualization (Three.js), scroll-driven cinematic transitions, and gold dust particle effects.
 
 ```
-app/
-└── src/
-    ├── app/page.tsx             # Home page with token listing
-    ├── components/
-    │   ├── hero.tsx             # Hero section with parallax scroll
-    │   ├── bonding-curve-3d.tsx # Three.js 3D bonding curve
-    │   ├── navbar.tsx
-    │   ├── token-card.tsx
-    │   └── sparkline.tsx
-    └── app/globals.css          # Design system tokens
+app/src/
+├── app/
+│   ├── layout.tsx               # Root layout (providers, fonts)
+│   ├── page.tsx                 # Landing — hero + token grid
+│   ├── globals.css              # Design system tokens
+│   ├── create/                  # Token creation form
+│   ├── token/[id]/              # Token detail — chart, trade, history
+│   ├── leaderboard/             # Top tokens, traders, creators
+│   ├── profile/[address]/       # User profile, stats, referral dashboard
+│   └── api/                     # API routes
+└── components/
+    ├── wallet-provider.tsx      # Solana wallet connection (Phantom, Solflare)
+    ├── referral-provider.tsx    # Referral context (detect, store, apply)
+    ├── navbar.tsx               # Sticky nav + wallet dropdown
+    ├── hero.tsx                 # Hero with parallax scroll
+    ├── bonding-curve-3d.tsx     # Three.js 3D bonding curve
+    ├── bonding-curve-mini.tsx   # Mini 3D curve for cards
+    ├── token-card.tsx           # Token listing card
+    ├── token-chart.tsx          # Price chart (lightweight-charts)
+    ├── trade-form.tsx           # Buy/sell form
+    ├── trade-history.tsx        # Recent trades list
+    ├── sparkline.tsx            # Mini sparkline chart
+    ├── ticker-price.tsx         # Live price ticker
+    ├── register-referral-modal.tsx   # Register as referrer
+    ├── incoming-referral-modal.tsx   # Accept referral link
+    ├── celebration-modal.tsx    # Graduation celebration
+    ├── toast.tsx                # Toast notifications
+    ├── button-particles.tsx     # Gold particle effects
+    └── footer.tsx               # Footer
 ```
 
 ### SDK (TypeScript)
@@ -88,6 +107,7 @@ sdk/src/
 ├── math.ts                   # Client-side curve math (calculateBuyAmount, calculateSellAmount)
 ├── pda.ts                    # PDA derivation (global, bonding curve, fee vault, referral)
 ├── types.ts                  # TypeScript interfaces (Global, BondingCurve, Referral)
+├── events.ts                 # Trade history parser (getTradeHistory from program logs)
 ├── constants.ts              # Program ID, seeds, defaults
 └── index.ts                  # Barrel export
 ```
@@ -105,10 +125,10 @@ Constant product with virtual reserves (`virtual_sol * virtual_token = k`).
 ## Stack
 
 - **Program**: Anchor 0.32.1, Rust
-- **Frontend**: Next.js, Tailwind CSS, Three.js (React Three Fiber) — by Claude Opus 4.6
+- **Frontend**: Next.js, React 19, Tailwind CSS v4, Three.js (vanilla)
 - **SDK**: TypeScript — handmade
 - **Tests**: TypeScript (ts-mocha), 4 test suites (admin, launch, trade, referral)
 
 ## Status
 
-Program complete. SDK complete. Tests 01-04 complete. Migration test and minor improvements in backlog.
+Program deployed on devnet. SDK complete. Tests 01-04 passing (28/28). Frontend connected — referral system tested end-to-end. Migration test in backlog.

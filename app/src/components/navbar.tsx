@@ -24,6 +24,9 @@ export function Navbar() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => { setMounted(true); }, []);
 
   const pathname = usePathname();
   const { publicKey, wallet, wallets, select, disconnect, connected } = useWallet();
@@ -144,7 +147,7 @@ export function Navbar() {
 
           {/* ── Right side ── */}
           <div className="flex items-center gap-3">
-            {connected && publicKey ? (
+            {mounted && connected && publicKey ? (
               <>
                 {/* Balance */}
                 {balance !== null && (

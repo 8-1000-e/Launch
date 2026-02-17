@@ -56,14 +56,47 @@ pub fn _buy(ctx: Context<Buy>, sol_amount: u64, min_tokens_out: u64) -> Result<(
 
     anchor_spl::token::transfer(cpi_context, tokens_out)?;
 
-    // Creator fee
-    let creator_fee = (fee as u128)
+    // Fee split: referral first (10% of total fee), then creator (65% of remainder), then protocol
+    let mut remaining_fee = fee;
+
+    // 1. Referral fee (10% of total fee) — calculated first to reward referrers on the full fee
+    if let Some(referral) = &mut ctx.accounts.referral
+    {
+        let (expected_pda, _) = Pubkey::find_program_address(
+            &[REFERRAL_SEED, referral.referrer.as_ref()],
+            ctx.program_id,
+        );
+        require!(referral.key() == expected_pda, TradeError::InvalidReferral);
+
+        let referral_fee = (fee as u128)
+            .checked_mul(ctx.accounts.global.referral_share_bps as u128)
+            .ok_or(MathError::Overflow)?
+            .checked_div(10_000)
+            .ok_or(MathError::DivisionByZero)?;
+        let referral_fee = u64::try_from(referral_fee).map_err(|_| MathError::CastOverflow)?;
+
+        let cpi_context = CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            anchor_lang::system_program::Transfer{
+                from: ctx.accounts.buyer.to_account_info(),
+                to: referral.to_account_info(),
+            }
+        );
+        anchor_lang::system_program::transfer(cpi_context, referral_fee)?;
+
+        referral.total_earned = referral.total_earned.checked_add(referral_fee).ok_or(MathError::Overflow)?;
+        referral.trade_count = referral.trade_count.checked_add(1).ok_or(MathError::Overflow)?;
+
+        remaining_fee = remaining_fee.checked_sub(referral_fee).ok_or(MathError::Overflow)?;
+    }
+
+    // 2. Creator fee (65% of remaining fee after referral)
+    let creator_fee = (remaining_fee as u128)
         .checked_mul(ctx.accounts.global.creator_share_bps as u128)
         .ok_or(MathError::Overflow)?
         .checked_div(10_000)
         .ok_or(MathError::DivisionByZero)?;
     let creator_fee = u64::try_from(creator_fee).map_err(|_| MathError::CastOverflow)?;
-    let remaining_fee = fee.checked_sub(creator_fee).ok_or(MathError::Overflow)?;
 
     if creator_fee > 0 {
         let cpi_context = CpiContext::new(
@@ -76,24 +109,10 @@ pub fn _buy(ctx: Context<Buy>, sol_amount: u64, min_tokens_out: u64) -> Result<(
         anchor_lang::system_program::transfer(cpi_context, creator_fee)?;
     }
 
-    if let Some(referral) = &mut ctx.accounts.referral
-    {
-        // Validate referral PDA
-        let (expected_pda, _) = Pubkey::find_program_address(
-            &[REFERRAL_SEED, referral.referrer.as_ref()],
-            ctx.program_id,
-        );
-        require!(referral.key() == expected_pda, TradeError::InvalidReferral);
+    // 3. Protocol fee (remainder)
+    let protocol_fee = remaining_fee.checked_sub(creator_fee).ok_or(MathError::Overflow)?;
 
-        let referral_fee = (remaining_fee as u128)
-            .checked_mul(ctx.accounts.global.referral_share_bps as u128)
-            .ok_or(MathError::Overflow)?
-            .checked_div(10_000)
-            .ok_or(MathError::DivisionByZero)?;
-        let referral_fee = u64::try_from(referral_fee).map_err(|_| MathError::CastOverflow)?;
-
-        let protocol_fee = remaining_fee.checked_sub(referral_fee).ok_or(MathError::Overflow)?;
-
+    if protocol_fee > 0 {
         let cpi_context = CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
             anchor_lang::system_program::Transfer{
@@ -101,33 +120,7 @@ pub fn _buy(ctx: Context<Buy>, sol_amount: u64, min_tokens_out: u64) -> Result<(
                 to: ctx.accounts.fee_vault.to_account_info(),
             }
         );
-
         anchor_lang::system_program::transfer(cpi_context, protocol_fee)?;
-
-        let cpi_context = CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
-            anchor_lang::system_program::Transfer{
-                from: ctx.accounts.buyer.to_account_info(),
-                to: referral.to_account_info(),
-            }
-        );
-
-        anchor_lang::system_program::transfer(cpi_context, referral_fee)?;
-
-        referral.total_earned = referral.total_earned.checked_add(referral_fee).ok_or(MathError::Overflow)?;
-        referral.trade_count = referral.trade_count.checked_add(1).ok_or(MathError::Overflow)?;
-    }
-    else
-    {
-        let cpi_context = CpiContext::new(
-                ctx.accounts.system_program.to_account_info(),
-                anchor_lang::system_program::Transfer{
-                    from: ctx.accounts.buyer.to_account_info(),
-                    to: ctx.accounts.fee_vault.to_account_info(),
-                }
-            );
-
-        anchor_lang::system_program::transfer(cpi_context, remaining_fee)?;
     }
 
     ctx.accounts.bonding_curve.virtual_sol = ctx.accounts.bonding_curve.virtual_sol.checked_add(sol_after_fee).ok_or(MathError::Overflow)?;

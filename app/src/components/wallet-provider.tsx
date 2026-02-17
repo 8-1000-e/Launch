@@ -5,7 +5,7 @@ if (typeof window !== "undefined" && !window.Buffer) {
   window.Buffer = Buffer;
 }
 
-import { useMemo } from "react";
+import { useMemo, Suspense } from "react";
 import {
   ConnectionProvider,
   WalletProvider,
@@ -14,6 +14,7 @@ import { clusterApiUrl } from "@solana/web3.js";
 import { PhantomWalletAdapter } from "@solana/wallet-adapter-phantom";
 import { SolflareWalletAdapter } from "@solana/wallet-adapter-solflare";
 import { ToastProvider } from "./toast";
+import { ReferralProvider } from "./referral-provider";
 
 export function WalletProviderWrapper({
   children,
@@ -35,7 +36,11 @@ export function WalletProviderWrapper({
   return (
     <ConnectionProvider endpoint={endpoint}>
       <WalletProvider wallets={wallets} autoConnect>
-        <ToastProvider>{children}</ToastProvider>
+        <Suspense>
+          <ReferralProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </ReferralProvider>
+        </Suspense>
       </WalletProvider>
     </ConnectionProvider>
   );

@@ -35,15 +35,19 @@ Launch/                    ← Frontend project root
 │   │   │   ├── profile/[address]/page.tsx  ← Profile + referral dashboard
 │   │   │   └── token/[id]/page.tsx ← Token detail + trade
 │   │   └── components/
-│   │       ├── wallet-provider.tsx  ← Solana wallet context (Phantom, Solflare, devnet)
-│   │       ├── navbar.tsx           ← Wallet modal + connected dropdown + balance
+│   │       ├── wallet-provider.tsx  ← Solana wallet context + Suspense + ReferralProvider wrapping
+│   │       ├── referral-provider.tsx ← Global referral context: localStorage persist, on-chain check, 3 modals
+│   │       ├── register-referral-modal.tsx ← "Become a Referrer" premium modal (10% hero, stepper, social proof)
+│   │       ├── incoming-referral-modal.tsx ← "You've been invited" modal for ?ref= visitors
+│   │       ├── celebration-modal.tsx ← Gold confetti celebration after registration
+│   │       ├── navbar.tsx           ← Wallet modal + connected dropdown + balance (mounted guard)
 │   │       ├── hero.tsx             ← 3D bonding curve hero with scroll fade
 │   │       ├── bonding-curve-3d.tsx ← Vanilla Three.js 3D chart
 │   │       ├── token-card.tsx
 │   │       ├── sparkline.tsx
 │   │       ├── footer.tsx
 │   │       ├── token-chart.tsx      ← TradingView lightweight-charts
-│   │       ├── trade-form.tsx       ← Buy/sell form with particles
+│   │       ├── trade-form.tsx       ← Buy/sell form + referral indicator + share & earn
 │   │       ├── trade-history.tsx
 │   │       ├── ticker-price.tsx     ← Odometer price animation
 │   │       ├── bonding-curve-mini.tsx ← SVG mini curve

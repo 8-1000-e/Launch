@@ -258,3 +258,46 @@
 **Context**: Profile page used `seededRandom` + `generateProfile` to create fake data from wallet address hash.
 **Decision**: Remove ALL mock data. New `useProfileData` hook fetches everything from chain. Only `seededRandom` kept for Identicon color generation.
 **Rationale**: Real data is now available on devnet. Mock data created false expectations.
+
+## 2026-02-17 — Fee split reorder: referral FIRST on total fee
+**Context**: Referral was getting 10% of remainder after creator (= 10% of 35% = 3.5% of total fee = 0.00035 SOL). Emile wants referral to be the central differentiator.
+**Decision**: Calculate referral fee FIRST on total fee (10% of 0.01 SOL = 0.001 SOL), then creator gets 65% of remainder.
+**Rationale**: 0.00035 SOL per trade is not motivating enough. 0.001 SOL (nearly 3x) makes referral program more attractive. Referral is meant to be THE differentiator of this launchpad vs competitors.
+**Files changed**: buy.rs, sell.rs, create_and_buy.rs — all 3 trade handlers.
+**Note**: Program needs rebuild + redeploy to devnet. Tests need fee amount adjustments.
+
+## 2026-02-17 — Referral link: localStorage for persistence
+**Context**: ?ref= query parameter was lost when navigating between pages (SPA navigation drops query params).
+**Decision**: Store referral wallet address in localStorage on first visit with ?ref=. Read from localStorage when needed.
+**Rationale**: Simple, no backend needed. Persists across page navigations and even browser restarts.
+
+## 2026-02-17 — Devnet deployment: anchor upgrade over deploy
+**Context**: Program was previously deployed to devnet. Running `anchor deploy` again failed with DeclaredProgramIdMismatch.
+**Decision**: Use `anchor upgrade --program-id <id> target/deploy/token_lp.so` for subsequent deployments. `anchor deploy` is only for first-time.
+**Rationale**: `anchor deploy` creates a new program from keypair. `anchor upgrade` updates an existing program binary. Must also run `anchor idl upgrade` separately.
+**Skill created**: `~/.claude/skills/brain-dump/extracted/anchor-deploy-vs-upgrade/SKILL.md`
+
+## 2026-02-17 — Referral: read-only check before transaction popup
+**Context**: Auto-registering users as referrers on wallet connect caused Phantom to spam transaction approval popups every time the app loaded.
+**Decision**: Call `getReferral()` (read-only, no popup) first to check on-chain status. Only show the registration modal if user is NOT already registered. User must explicitly click "Become a Referrer" to trigger the transaction.
+**Rationale**: UX-critical — users don't want unexplained transaction popups. Read-only RPC calls are free and instant. Modal explains the value proposition before any transaction.
+
+## 2026-02-17 — Referral: modal explanation before any on-chain transaction
+**Context**: Users arriving on the platform had no idea what "referral registration" meant. They were being asked to sign a transaction with zero context.
+**Decision**: Show a premium explanation modal (RegisterReferralModal) with: 10% hero number, "you earn SOL" headline, collapsible how-it-works stepper, social proof. Only fire `registerReferral()` on explicit CTA click.
+**Rationale**: Conversion requires understanding. Boss spec: modal is the first thing users see, must be premium and explain the value prop clearly.
+
+## 2026-02-17 — Referral: incoming referral modal for ?ref= visitors
+**Context**: Users clicking a `?ref=WALLET` link had no idea what was happening. The referral was silently saved to localStorage.
+**Decision**: Show an `IncomingReferralModal` explaining: who referred them, what 10% means, that it costs nothing extra. Accept/Decline/Clear actions.
+**Rationale**: Transparency builds trust. Users should understand and consent to having a referrer attached to their account.
+
+## 2026-02-17 — Navbar: mounted state guard for hydration
+**Context**: Wallet adapter's `autoConnect` causes server-client mismatch. Server renders "Connect Wallet" button, client renders "My Profile" link.
+**Decision**: Add `const [mounted, setMounted] = useState(false)` + `useEffect(() => setMounted(true), [])`. Gate wallet-dependent rendering on `mounted`.
+**Rationale**: Standard pattern for wallet-dependent UI in SSR frameworks. Prevents React hydration error that causes visible flash/crash.
+
+## 2026-02-17 — Celebration: gold-only confetti (not multicolor)
+**Context**: Boss spec in DISCUSSION.md explicitly called for gold-themed confetti, not rainbow.
+**Decision**: 5 gold shades only: #c9a84c, #dbb85e, #8a7034, #e8d08c, #a8873a. 50 particles with staggered fall animation.
+**Rationale**: Matches the brand DA. Multicolor confetti looks generic/childish. Gold confetti reinforces the premium/wealth aesthetic.

@@ -154,42 +154,25 @@ pub fn _create_and_buy_token(ctx: Context<CreateAndBuyToken>, name: String, symb
 
     anchor_spl::token::transfer(cpi_context, tokens_out)?;
 
-    // Creator fee — skip transfer since creator == signer (would pay themselves)
-    let creator_fee = (fee as u128)
-        .checked_mul(ctx.accounts.global.creator_share_bps as u128)
-        .ok_or(MathError::Overflow)?
-        .checked_div(10_000)
-        .ok_or(MathError::DivisionByZero)?;
-    let creator_fee = u64::try_from(creator_fee).map_err(|_| MathError::CastOverflow)?;
-    let remaining_fee = fee.checked_sub(creator_fee).ok_or(MathError::Overflow)?;
+    // Fee split: referral first (10% of total fee), then creator (65% of remainder), then protocol
+    // Creator fee transfer is skipped since creator == signer (would pay themselves)
+    let mut remaining_fee = fee;
 
-    // Fee distribution with referral split
+    // 1. Referral fee (10% of total fee)
     if let Some(referral) = &mut ctx.accounts.referral
     {
-        // Validate referral PDA
         let (expected_pda, _) = Pubkey::find_program_address(
             &[REFERRAL_SEED, referral.referrer.as_ref()],
             ctx.program_id,
         );
         require!(referral.key() == expected_pda, TradeError::InvalidReferral);
 
-        let referral_fee = (remaining_fee as u128)
+        let referral_fee = (fee as u128)
             .checked_mul(ctx.accounts.global.referral_share_bps as u128)
             .ok_or(MathError::Overflow)?
             .checked_div(10_000)
             .ok_or(MathError::DivisionByZero)?;
         let referral_fee = u64::try_from(referral_fee).map_err(|_| MathError::CastOverflow)?;
-
-        let protocol_fee = remaining_fee.checked_sub(referral_fee).ok_or(MathError::Overflow)?;
-
-        let cpi_context = CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
-            anchor_lang::system_program::Transfer{
-                from: ctx.accounts.creator.to_account_info(),
-                to: ctx.accounts.fee_vault.to_account_info(),
-            }
-        );
-        anchor_lang::system_program::transfer(cpi_context, protocol_fee)?;
 
         let cpi_context = CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -202,9 +185,22 @@ pub fn _create_and_buy_token(ctx: Context<CreateAndBuyToken>, name: String, symb
 
         referral.total_earned = referral.total_earned.checked_add(referral_fee).ok_or(MathError::Overflow)?;
         referral.trade_count = referral.trade_count.checked_add(1).ok_or(MathError::Overflow)?;
+
+        remaining_fee = remaining_fee.checked_sub(referral_fee).ok_or(MathError::Overflow)?;
     }
-    else
-    {
+
+    // 2. Creator fee (65% of remaining) — skip transfer, creator is the signer
+    let creator_fee = (remaining_fee as u128)
+        .checked_mul(ctx.accounts.global.creator_share_bps as u128)
+        .ok_or(MathError::Overflow)?
+        .checked_div(10_000)
+        .ok_or(MathError::DivisionByZero)?;
+    let creator_fee = u64::try_from(creator_fee).map_err(|_| MathError::CastOverflow)?;
+
+    // 3. Protocol fee (remainder after creator)
+    let protocol_fee = remaining_fee.checked_sub(creator_fee).ok_or(MathError::Overflow)?;
+
+    if protocol_fee > 0 {
         let cpi_context = CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
             anchor_lang::system_program::Transfer{
@@ -212,7 +208,7 @@ pub fn _create_and_buy_token(ctx: Context<CreateAndBuyToken>, name: String, symb
                 to: ctx.accounts.fee_vault.to_account_info(),
             }
         );
-        anchor_lang::system_program::transfer(cpi_context, remaining_fee)?;
+        anchor_lang::system_program::transfer(cpi_context, protocol_fee)?;
     }
 
     ctx.accounts.bonding_curve.virtual_sol = ctx.accounts.bonding_curve.virtual_sol.checked_add(sol_after_fee).ok_or(MathError::Overflow)?;

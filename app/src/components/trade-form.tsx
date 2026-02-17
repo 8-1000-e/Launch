@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
 import { ChevronDown, Copy, Check, ArrowDownUp, Loader2 } from "lucide-react";
 import { BN } from "@coral-xyz/anchor";
 import { PublicKey, LAMPORTS_PER_SOL } from "@solana/web3.js";
@@ -10,6 +9,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useButtonParticles } from "./button-particles";
 import { useToast } from "./toast";
 import { useTokenLaunchpad } from "@/hooks/use-token-launchpad";
+import { useReferral } from "./referral-provider";
 import { calculateBuyAmount, calculateSellAmount } from "@sdk/math";
 import { DEFAULT_TRADE_FEE_BPS } from "@sdk/constants";
 
@@ -41,8 +41,7 @@ export function TradeForm({
   const toast = useToast();
   const { client, connected, connection } = useTokenLaunchpad();
   const { publicKey } = useWallet();
-  const searchParams = useSearchParams();
-  const referralParam = searchParams.get("ref");
+  const { referrer: referralParam, isRegistered } = useReferral();
 
   const [mode, setMode] = useState<"buy" | "sell">("buy");
   const [amount, setAmount] = useState("");
@@ -184,8 +183,9 @@ export function TradeForm({
   }
 
   function handleCopyRef() {
+    const wallet = publicKey?.toBase58() || "";
     const refLink = mint
-      ? `${window.location.origin}/token/${mint}?ref=${referralParam || ""}`
+      ? `${window.location.origin}/token/${mint}?ref=${wallet}`
       : "";
     navigator.clipboard.writeText(refLink);
     setCopied(true);
@@ -422,29 +422,44 @@ export function TradeForm({
         </button>
 
         {/* Referral */}
-        <div className="border-t border-border pt-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] text-text-3">
-              Share & earn <span className="text-brand font-medium">10%</span> of fees
-            </p>
-            <button
-              onClick={handleCopyRef}
-              className="flex items-center gap-1 text-[11px] text-brand hover:text-brand-bright transition-colors"
-            >
-              {copied ? (
-                <>
-                  <Check className="h-3 w-3" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3 w-3" />
-                  Copy link
-                </>
-              )}
-            </button>
+        {(referralParam || isRegistered) && (
+          <div className="border-t border-border pt-3 space-y-2">
+            {referralParam && (
+              <div className="flex items-center gap-2 border border-buy/20 bg-buy/5 px-3 py-2">
+                <div className="h-1.5 w-1.5 rounded-full bg-buy animate-pulse" />
+                <p className="text-[11px] text-buy">
+                  Referral active
+                </p>
+                <span className="ml-auto font-mono text-[11px] text-text-3">
+                  {referralParam.slice(0, 4)}...{referralParam.slice(-4)}
+                </span>
+              </div>
+            )}
+            {isRegistered && (
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] text-text-3">
+                  Share & earn <span className="text-brand font-medium">10%</span> of fees
+                </p>
+                <button
+                  onClick={handleCopyRef}
+                  className="flex items-center gap-1 text-[11px] text-brand hover:text-brand-bright transition-colors"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-3 w-3" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3 w-3" />
+                      Copy link
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

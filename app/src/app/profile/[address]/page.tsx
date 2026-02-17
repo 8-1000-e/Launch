@@ -29,6 +29,7 @@ import { Footer } from "@/components/footer";
 import { useToast } from "@/components/toast";
 import { useTokenLaunchpad } from "@/hooks/use-token-launchpad";
 import { TokenLaunchpadClient } from "@sdk/client";
+import { getReferralPda } from "@sdk/pda";
 import {
   useProfileData,
   type ProfileHolding,
@@ -61,6 +62,25 @@ function timeAgo(timestamp: number): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+/** SOL amount with subscript notation for very small values: 0.0₅123 */
+function SolAmount({ value }: { value: number }) {
+  if (value === 0) return <>0</>;
+  if (value >= 0.001) return <>{value.toFixed(4)}</>;
+
+  const str = value.toFixed(20);
+  const dot = str.indexOf(".");
+  let zeros = 0;
+  for (let i = dot + 1; i < str.length; i++) {
+    if (str[i] !== "0") break;
+    zeros++;
+  }
+  const sigDigits = str.slice(dot + 1 + zeros, dot + 1 + zeros + 4).replace(/0+$/, "") || "0";
+
+  return (
+    <>0.0<sub className="text-[0.65em] opacity-60">{zeros}</sub>{sigDigits}</>
+  );
 }
 
 /* ─── Animated counter hook ─── */
@@ -1042,6 +1062,7 @@ function ReferralsTab({
   const [claiming, setClaiming] = useState(false);
   const [onChainEarned, setOnChainEarned] = useState<number>(0);
   const [onChainTradeCount, setOnChainTradeCount] = useState<number>(0);
+  const [claimable, setClaimable] = useState<number>(0);
   const [loadingRef, setLoadingRef] = useState(true);
 
   // Read-only client for fetching referral data (works without wallet)
@@ -1061,10 +1082,17 @@ function ReferralsTab({
     async function fetchReferral() {
       setLoadingRef(true);
       try {
-        const ref = await readClient.getReferral(new PublicKey(address));
+        const pubkey = new PublicKey(address);
+        const ref = await readClient.getReferral(pubkey);
         setIsRegistered(true);
         setOnChainEarned(ref.totalEarned.toNumber() / LAMPORTS_PER_SOL);
         setOnChainTradeCount(ref.tradeCount.toNumber());
+        // Claimable = PDA lamports - rent
+        const pda = getReferralPda(pubkey);
+        const pdaBalance = await connection.getBalance(pda);
+        const rentExempt = await connection.getMinimumBalanceForRentExemption(8 + 32 + 8 + 8 + 1); // Referral account size
+        const claimableLamports = Math.max(0, pdaBalance - rentExempt);
+        setClaimable(claimableLamports / LAMPORTS_PER_SOL);
       } catch {
         setIsRegistered(false);
       } finally {
@@ -1109,8 +1137,10 @@ function ReferralsTab({
       await walletClient.claimReferralFees();
       toast.success(`Claimed referral fees`);
       // Refresh
-      const ref = await readClient.getReferral(new PublicKey(address));
+      const pubkey = new PublicKey(address);
+      const ref = await readClient.getReferral(pubkey);
       setOnChainEarned(ref.totalEarned.toNumber() / LAMPORTS_PER_SOL);
+      setClaimable(0);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Claim failed";
       toast.error(message);
@@ -1236,20 +1266,32 @@ function ReferralsTab({
       )}
 
       {/* ── Summary cards ── */}
-      <div className={`grid gap-3 mb-6 ${isOwnProfile ? "grid-cols-2" : "grid-cols-2"}`}>
+      <div className={`grid gap-3 mb-6 ${isOwnProfile ? "grid-cols-3" : "grid-cols-2"}`}>
         <div
           className="border border-border bg-surface/40 p-3"
           style={{ animation: "fade-in-up 0.3s ease-out both" }}
         >
           <p className="text-[10px] uppercase tracking-wider text-text-3">Total Earned</p>
           <p className="mt-1 font-mono text-lg font-bold tabular-nums text-brand">
-            {onChainEarned.toFixed(3)}
+            <SolAmount value={onChainEarned} />
             <span className="ml-0.5 text-[10px] font-normal text-text-3">SOL</span>
           </p>
         </div>
+        {isOwnProfile && (
+          <div
+            className="border border-border bg-surface/40 p-3"
+            style={{ animation: "fade-in-up 0.3s ease-out both 100ms" }}
+          >
+            <p className="text-[10px] uppercase tracking-wider text-text-3">Claimable</p>
+            <p className="mt-1 font-mono text-lg font-bold tabular-nums text-buy">
+              <SolAmount value={claimable} />
+              <span className="ml-0.5 text-[10px] font-normal text-text-3">SOL</span>
+            </p>
+          </div>
+        )}
         <div
           className="border border-border bg-surface/40 p-3"
-          style={{ animation: "fade-in-up 0.3s ease-out both 100ms" }}
+          style={{ animation: "fade-in-up 0.3s ease-out both 200ms" }}
         >
           <p className="text-[10px] uppercase tracking-wider text-text-3">Referred Trades</p>
           <p className="mt-1 font-mono text-lg font-bold tabular-nums text-text-1">
@@ -1259,7 +1301,7 @@ function ReferralsTab({
       </div>
 
       {/* ── Claim Button (own profile only) ── */}
-      {isOwnProfile && onChainEarned > 0 && (
+      {isOwnProfile && claimable > 0 && (
         <div
           className="mb-6"
           style={{ animation: "fade-in-up 0.3s ease-out both 350ms" }}

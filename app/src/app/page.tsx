@@ -39,6 +39,12 @@ function getRotatingConnection(): Connection {
   return new Connection(`https://devnet.helius-rpc.com/?api-key=${key}`, "confirmed");
 }
 
+// Batch-capable connection (key 2 only — free plan doesn't support batch RPCs)
+const HELIUS_BATCH_KEY = process.env.NEXT_PUBLIC_HELIUS_API_KEY_2;
+const batchConnection = HELIUS_BATCH_KEY
+  ? new Connection(`https://devnet.helius-rpc.com/?api-key=${HELIUS_BATCH_KEY}`, "confirmed")
+  : null;
+
 /* ─── Trade data fetching for token list ─── */
 
 const TRADES_PER_TOKEN = 10;
@@ -55,8 +61,9 @@ async function fetchRecentTrades(
   const signatures = await connection.getSignaturesForAddress(pda, { limit: TRADES_PER_TOKEN });
   if (signatures.length === 0) return { volume24h: 0, priceChange24h: 0, sparkData: [] };
 
-  // 1 RPC call: batch fetch all transactions at once
-  const txs = await connection.getParsedTransactions(
+  // 1 RPC call: batch fetch all transactions at once (requires paid key)
+  const batchConn = batchConnection ?? connection;
+  const txs = await batchConn.getParsedTransactions(
     signatures.map((s) => s.signature),
     { maxSupportedTransactionVersion: 0 },
   );

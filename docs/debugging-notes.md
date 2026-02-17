@@ -196,3 +196,64 @@ Activity heatmap tooltip appears "at the other end of the screen" instead of nea
 Used `position: fixed` with `getBoundingClientRect()` — coordinates are viewport-relative but don't account for scroll position when the element is in a scrollable container.
 ### Fix
 Switched to `position: absolute` relative to the heatmap container using a `containerRef`. Compute offset as `cellRect.left - parentRect.left` and `cellRect.top - parentRect.top`.
+
+## Tailwind CSS v4: SVG `r:` Property Crashes Entire Stylesheet (2026-02-17)
+### Symptoms
+- All CSS stops loading — page renders with zero styles
+- Browser shows "Internal Server Error" when requesting the CSS endpoint
+- No error in terminal — Tailwind/PostCSS fails silently
+- Happened after adding `@keyframes grad-flash` with `r: 6`, `r: 20`, `r: 40`
+### Root Cause
+Tailwind CSS v4's PostCSS pipeline cannot handle SVG-only CSS properties (`r`, `cx`, `cy`, `rx`, `ry`) in any CSS rule. When encountered, it silently rejects the ENTIRE stylesheet. The `r` property is valid CSS (for styling SVG `<circle>` elements) but Tailwind 4 doesn't support it.
+### Fix
+Replaced SVG `r:` values with `transform: scale()` equivalents:
+```css
+/* BROKEN */
+@keyframes grad-flash {
+  0% { opacity: 0; r: 6; }
+  50% { opacity: 1; r: 20; }
+  100% { opacity: 0; r: 40; }
+}
+
+/* FIXED */
+@keyframes grad-flash {
+  0% { opacity: 0; transform: scale(0.3); }
+  30% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(2); }
+}
+```
+Also needed `rm -rf .next` to clear stale cache.
+### Key Insight
+If ALL styles suddenly disappear with Tailwind 4, search for SVG-only properties in your CSS. The failure is completely silent.
+**Skill created**: `~/.claude/skills/brain-dump/extracted/tailwind4-css-svg-property-crash/SKILL.md`
+
+## Wallet Auto-Connect Spamming Transaction Popups (2026-02-17)
+### Symptoms
+- Every page load triggers a Phantom transaction approval popup
+- User has no idea what the transaction is for
+- Popup appears immediately after wallet auto-connects
+### Root Cause
+`registerReferral()` was called automatically on wallet connect in a `useEffect`. This sends an on-chain transaction which triggers the wallet popup. On every page load with auto-connect, the popup fires.
+### Fix
+1. Call `getReferral()` first (read-only RPC call, no popup) to check if already registered
+2. If already registered, set `isRegistered = true` and skip the modal entirely
+3. If NOT registered, show an explanation modal (RegisterReferralModal) — user must explicitly click to trigger the transaction
+### Key Insight
+Never auto-fire on-chain transactions in `useEffect`. Always check read-only state first, then require explicit user action for writes.
+
+## Navbar Hydration Mismatch with Wallet Auto-Connect (2026-02-17)
+### Symptoms
+- React hydration error in console
+- Navbar briefly flashes wrong content
+- Server renders "Connect Wallet" button but client renders "My Profile" link
+### Root Cause
+`useWallet()` with `autoConnect` resolves the wallet on the client before hydration completes. Server has no wallet → renders disconnect state. Client has wallet → renders connected state. Mismatch.
+### Fix
+```tsx
+const [mounted, setMounted] = useState(false);
+useEffect(() => { setMounted(true); }, []);
+// In JSX:
+{mounted && connected && publicKey ? <ProfileLink /> : <ConnectButton />}
+```
+### Key Insight
+Standard pattern for any wallet/auth-dependent UI in SSR frameworks. Gate on `mounted` to ensure server and client render the same initial state.

@@ -7,8 +7,9 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 ## Current State
 
 - **Branch**: main (+ `programs` branch = subtree of `programs/token-lp/`)
-- **Status**: Program complete. Frontend SDK integration complete. Profile page uses real on-chain data.
+- **Status**: Fee split modified (referral first). Program needs rebuild + redeploy to devnet.
 - **Last updated**: 2026-02-17
+- **PENDING**: `anchor build` then `anchor upgrade` to deploy fee split changes to devnet
 - **Dev server**: `cd app/ && npx next dev --webpack --port 3001` (MUST use --webpack flag, Turbopack hangs with dual lockfiles)
 - **Frontend location**: `/Users/emile/Documents/learn/Dev Journey/Launch/app/`
 - **Backend location**: `/Users/emile/Documents/learn/Dev Journey/Launch/programs/token-lp/`
@@ -84,11 +85,23 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 - [x] All 5 SDK bugs fixed (error parsing, package.json, export typo, ATA, double fetch)
 - [x] SDK compiles clean (`npx tsc --noEmit --esModuleInterop --resolveJsonModule --skipLibCheck`)
 
-### Phase 9: Next Steps
+### Phase 9: Fee Split Refactor (2026-02-17) — IN PROGRESS
+- [x] Changed fee split order: referral FIRST (10% of total fee), then creator (65% of remainder), then protocol
+- [x] Modified buy.rs, sell.rs, create_and_buy.rs
+- [ ] `anchor build` to verify compilation <- CURRENT
+- [ ] `anchor upgrade` to deploy to devnet
+- [ ] Update tests 03_trade and 04_referral for new fee amounts
+
+### Phase 10: SDK Extensions (2026-02-17) ✅
+- [x] `sdk/src/math.ts` — added `getCurrentPrice(virtualSol, virtualTokens)` returning number
+- [x] `sdk/src/client.ts` — added `listAllBondingCurves()` and `getTokenPrice(mint)`
+- [x] `sdk/src/events.ts` — NEW: `getTradeHistory(connection, bondingCurvePda, limit?)` with borsh deserialization
+- [ ] Export `getTradeHistory` and `TradeRecord` from `sdk/src/index.ts`
+
+### Backlog
 - [ ] Migration tests (05_migration.test.ts — currently empty)
 - [ ] Close instruction (reclaim bonding curve rent after migration)
 - [ ] Delayed open_time in migration (anti-snipe for Raydium pool)
-- [ ] Connect frontend to real program (devnet deploy)
 
 ## Task Progress — Frontend
 
@@ -102,7 +115,7 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 - [x] Leaderboard page (`/leaderboard`) — 3 tabs, animated hero stats, CSS trophy, podium, hall of fame
 - [x] Profile page (`/profile/[address]`) — real on-chain data (portfolio, trades, created tokens, referrals, heatmap)
 - [x] Solana wallet connection (Phantom + Solflare) — custom UI, devnet, auto-reconnect
-- [x] Navbar: real wallet modal + connected dropdown + balance display + "My Profile" link
+- [x] Navbar: real wallet modal + connected dropdown + balance display + "My Profile" link (with mounted guard for hydration)
 - [x] Profile referral dashboard: register button, referral link copy, claimable balance, claim button (own profile only)
 - [x] Unicorn Studio 3D particle background for token grid section (gold-tinted, no mouse interaction)
 - [x] Cross-fade transition: hero 3D bonding curve fades out → Unicorn Studio fades in on scroll
@@ -110,15 +123,31 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 - [x] Trade history + chart: real on-chain TradeEvent parsing + OHLC candles + live WebSocket updates
 - [x] Profile page: useProfileData hook (PDA-based scanning), SOL balance, activity heatmap, loading skeletons
 - [x] Helius RPC with round-robin pool (2 API keys) for rate limit management
+- [x] **Referral system frontend overhaul (P0+P1)** — see below
 - [ ] Clean up orphan files: `how-it-works.tsx`, `activity-ticker.tsx`
 
-## Fee Architecture
+### Referral System Frontend (Completed 2026-02-17)
+- [x] `referral-provider.tsx` — Global provider: localStorage persistence, read-only on-chain check, modal orchestration
+- [x] `register-referral-modal.tsx` — Premium modal: 10% hero, "you earn SOL" headline, collapsible stepper, social proof, pulse-glow CTA
+- [x] `incoming-referral-modal.tsx` — Shown on `?ref=WALLET` visit: explains referral, accept/decline/clear, referrer address card
+- [x] `celebration-modal.tsx` — Gold-only confetti (50 particles, 5 gold shades), copy link, share X/Telegram
+- [x] `trade-form.tsx` — "Referral active" indicator (green dot + truncated address), "Share & earn" section (gated by isRegistered)
+- [x] `wallet-provider.tsx` — Wrapped with `<Suspense><ReferralProvider>` in provider hierarchy
+- [x] `navbar.tsx` — Hydration fix: `mounted` state guard before rendering wallet-dependent UI
+- [x] `globals.css` — 15+ new keyframes: confetti-fall, modal-entrance, glow-ring, modal-card-enter, gold-line-draw, etc.
+- [x] Fixed: Tailwind 4 stylesheet crash from SVG `r:` property in @keyframes (replaced with `transform: scale()`)
+
+## Fee Architecture (UPDATED 2026-02-17)
 
 - `trade_fee_bps = 100` (1% of SOL on every buy/sell)
-- `creator_share_bps = 6500` (65% of fee → token creator)
-- `referral_share_bps = 1000` (10% of remaining fee → referrer, if present)
-- Protocol gets the remainder
-- Example: 1 SOL trade → 0.01 SOL fee → 0.0065 creator, 0.00035 referral, 0.00315 protocol
+- **NEW ORDER**: Referral calculated FIRST on total fee, then creator on remainder, then protocol
+- `referral_share_bps = 1000` (10% of TOTAL fee → referrer, if present)
+- `creator_share_bps = 6500` (65% of remaining fee after referral → token creator)
+- Protocol gets the final remainder
+- Example (with referral): 1 SOL trade → 0.01 SOL fee → 0.001 referral, 0.00585 creator, 0.00315 protocol
+- Example (no referral): 1 SOL trade → 0.01 SOL fee → 0.0065 creator, 0.0035 protocol
+- **Changed in**: buy.rs, sell.rs, create_and_buy.rs (all 3 trade handlers)
+- **Tests 03_trade and 04_referral may need fee amount adjustments**
 
 ## SDK Bugs (Found 2026-02-15)
 
@@ -212,5 +241,10 @@ IMPORTANT: At session start, read all .md files in the /docs/ directory to resto
 
 ### Frontend (app/src/)
 - `components/wallet-provider.tsx` — Solana wallet ConnectionProvider + WalletProvider
-- `components/navbar.tsx` — sticky navbar with real wallet connection
+- `components/navbar.tsx` — sticky navbar with real wallet connection (mounted guard for hydration)
+- `components/referral-provider.tsx` — Global referral context: localStorage persist, on-chain check, modal orchestration
+- `components/register-referral-modal.tsx` — Premium "Become a Referrer" modal (10% hero, stepper, social proof)
+- `components/incoming-referral-modal.tsx` — "You've been invited" modal when ?ref= detected
+- `components/celebration-modal.tsx` — Gold confetti celebration after successful registration
+- `components/trade-form.tsx` — Buy/sell + referral active indicator + share & earn section
 - `app/page.tsx` — home page with scroll-snap, cross-fade

@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: projectRoot,
     resolveAlias: {
-      "@sdk/*": [path.resolve(sdkPath, "./*")],
+      "@sdk/*": ["../sdk/src/*"],
     },
   },
 
